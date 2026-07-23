@@ -36,10 +36,10 @@ sequenceDiagram
 
 ## Quick Start
 
-### 1. Install & Prepare
-Run the installer to configure executable permissions and perform a one-time build of the Native Objective-C overlay:
+### 1. Make executable
+Configure executable permissions on the launcher:
 ```bash
-./install.sh
+chmod +x run.sh
 ```
 
 ### 2. Run standard capture
@@ -50,6 +50,7 @@ Run the installer to configure executable permissions and perform a one-time bui
 2. Move your cursor to the opposite corner (a blue outline guides you).
 3. Click again to confirm (or press Esc to cancel).
 4. Google Chrome will automatically open Gemini, paste the screenshot, and submit it.
+(Note: On the first run, the script will automatically compile the native selector binary).
 
 ### 3. Dry-run (Copy to clipboard only)
 If you only want the screenshot copied to your clipboard without opening Chrome or pasting:

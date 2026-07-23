@@ -195,7 +195,7 @@ cat <<EOF > "$CONTENTS_DIR/document.wflow"
 </plist>
 EOF
 
-chmod +x "$RUN_SH"
+chmod +x "$RUN_SH" "$ROOT/gemini_snap.py"
 
 # 4. Register keyboard shortcut in pbs.plist
 echo "==> Registering keyboard shortcut (⌥⌘G)..."

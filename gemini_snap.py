@@ -95,22 +95,32 @@ def try_build_region_select() -> Optional[str]:
         return None
 
     print("Building two-click selector with clang (one-time)…", flush=True)
-    build = os.path.join(SCRIPT_DIR, "build.sh")
-    if os.path.isfile(build):
-        result = subprocess.run(["/bin/zsh", build], cwd=SCRIPT_DIR)
-    else:
-        result = subprocess.run(
-            [
-                "clang",
-                "-fobjc-arc",
-                "-O2",
-                "-framework",
-                "Cocoa",
-                "-o",
-                REGION_SELECT_BIN,
-                REGION_SELECT_SRC,
-            ]
+    sdkroot = ""
+    try:
+        sdkroot_res = subprocess.run(
+            ["xcrun", "--sdk", "macosx", "--show-sdk-path"],
+            capture_output=True,
+            text=True,
         )
+        if sdkroot_res.returncode == 0:
+            sdkroot = sdkroot_res.stdout.strip()
+    except Exception:
+        pass
+
+    args = [
+        "clang",
+        "-fobjc-arc",
+        "-O2",
+        "-framework",
+        "Cocoa",
+        "-o",
+        REGION_SELECT_BIN,
+        REGION_SELECT_SRC,
+    ]
+    if sdkroot:
+        args = ["clang", "-isysroot", sdkroot] + args[1:]
+
+    result = subprocess.run(args, cwd=SCRIPT_DIR)
     if result.returncode != 0:
         return None
     if os.path.isfile(REGION_SELECT_BIN):
