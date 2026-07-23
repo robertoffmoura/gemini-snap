@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # Uninstall Gemini Snap: Clean up shortcuts and services.
 set -euo pipefail
 

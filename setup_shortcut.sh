@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # setup_shortcut.sh
 # Programmatically creates a macOS Quick Action (Service) and registers its keyboard shortcut (⌥⌘G)
 set -euo pipefail

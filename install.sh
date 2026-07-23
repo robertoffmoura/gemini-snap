@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # Install Gemini Snap: build native selector and set executable permissions.
 set -euo pipefail
 
@@ -19,7 +19,7 @@ fi
 
 # Compile region_select if source exists
 if [[ -f "$ROOT/RegionSelect.m" ]]; then
-  /bin/zsh "$ROOT/build.sh" || true
+  /bin/bash "$ROOT/build.sh" || true
 fi
 
 # Set executable permissions on scripts and binaries

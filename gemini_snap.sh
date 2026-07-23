@@ -1,5 +1,5 @@
-#!/bin/zsh
+#!/bin/bash
 # Shell wrapper — prefers region_select two-click, else Python, else drag.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-exec /bin/zsh "$ROOT/run.sh" "$@"
+exec /bin/bash "$ROOT/run.sh" "$@"

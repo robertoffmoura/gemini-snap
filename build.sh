@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # Build the two-click region selector with clang (Objective-C).
 # Avoids the broken Swift module maps on many CLT installs.
 set -euo pipefail
