@@ -33,7 +33,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REGION_SELECT_BIN = os.path.join(SCRIPT_DIR, "region_select")
 REGION_SELECT_SRC = os.path.join(SCRIPT_DIR, "RegionSelect.m")
 GEMINI_URL = "https://gemini.google.com/app"
-DEFAULT_LOAD_WAIT = 4.5
+DEFAULT_LOAD_WAIT = 2.5
 DEFAULT_PASTE_WAIT = 1.5
 
 
