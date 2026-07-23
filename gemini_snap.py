@@ -5,7 +5,6 @@ Gemini Snap — two-click region → screenshot → Gemini in Chrome
 Selection:
   1. ./region_select (Objective-C overlay) if present or buildable via clang
   2. Python two-click via CoreGraphics (no drag; minimal UI)
-  3. --mode drag → screencapture -i as last resort
 
 Upload path:
   Capture PNG to a temp file → put PNG on clipboard → open Gemini in Chrome
@@ -159,7 +158,7 @@ def select_region_native() -> Tuple[str, Optional[Rect]]:
 
 
 # ---------------------------------------------------------------------------
-# Two-click: pure Python + CoreGraphics (ctypes) — no overlay, no drag
+# Two-click: pure Python + CoreGraphics (ctypes) — no overlay
 # ---------------------------------------------------------------------------
 def _load_quartz():
 	import ctypes
@@ -248,11 +247,6 @@ def select_region_python_two_click() -> Optional[Rect]:
 	w = int(round(abs(x2 - x1)))
 	h = int(round(abs(y2 - y1)))
 	return Rect(x, y, max(w, 1), max(h, 1))
-
-
-def select_region_interactive_drag() -> bool:
-	print("Drag a rectangle (Esc cancels)…", flush=True)
-	return subprocess.run(["screencapture", "-i", "-c", "-x"]).returncode == 0
 
 
 # ---------------------------------------------------------------------------
@@ -483,12 +477,6 @@ def main(argv: Optional[list] = None) -> int:
 	parser.add_argument("--save", metavar="PATH", help="Also keep PNG at PATH")
 	parser.add_argument("--dry-run", action="store_true")
 	parser.add_argument("--rect", metavar="X,Y,W,H")
-	parser.add_argument(
-		"--mode",
-		choices=("two-click", "drag"),
-		default="two-click",
-		help="two-click (default) or drag (screencapture -i)",
-	)
 	args = parser.parse_args(argv)
 
 	rect: Optional[Rect] = None
@@ -498,10 +486,6 @@ def main(argv: Optional[list] = None) -> int:
 	try:
 		if args.rect:
 			rect = Rect.parse(args.rect)
-		elif args.mode == "drag":
-			if not select_region_interactive_drag():
-				print("Cancelled.")
-				return 0
 		else:
 			# two-click preferred: native overlay, else Python click-click
 			status, rect = select_region_native()
