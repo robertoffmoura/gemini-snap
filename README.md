@@ -78,14 +78,16 @@ Customize the behavior of Gemini Snap using the following CLI flags:
 
 ## Global Keyboard Shortcut (Optional)
 
-You can launch Gemini Snap globally from anywhere in macOS using a keyboard shortcut (e.g., `⌥⌘G`).
+You can configure a global hotkey (such as `⌥⌘G` / Option + Command + G) to trigger Gemini Snap from anywhere in macOS using the built-in **Shortcuts** app:
 
-1. **Register the Service:**
+1. Open **Shortcuts.app** on your Mac.
+2. Click **+** in the top-right to create a new shortcut.
+3. Search for the **"Run Shell Script"** action in the list on the right and drag it into the shortcut.
+4. Set the command path to point to your script:
    ```bash
-   ./setup_shortcut.sh
+   /bin/bash /absolute/path/to/gemini-snap/run.sh
    ```
-2. **Usage:** Press **Option + Command + G** (`⌥⌘G`) at any time to start capturing.
-3. **Uninstall Service:** If you ever need to remove the shortcut and clean up cached settings:
-   ```bash
-   ./uninstall.sh
-   ```
+5. In the right-hand settings panel (under Shortcut Details / Info icon):
+   * Check **Use as Quick Action**.
+   * Click **Add Keyboard Shortcut** and press **Option + Command + G** (`⌥⌘G`).
+
