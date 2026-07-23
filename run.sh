@@ -13,10 +13,5 @@ if [[ ! -x "$ROOT/region_select" && -f "$ROOT/RegionSelect.m" ]]; then
   fi
 fi
 
-if [[ -x "$ROOT/.venv/bin/python" ]]; then
-  PY="$ROOT/.venv/bin/python"
-else
-  PY="python3"
-fi
-
-exec "$PY" "$ROOT/gemini_snap.py" "$@"
+PYTHON="${PYTHON:-python3}"
+exec "$PYTHON" "$ROOT/gemini_snap.py" "$@"

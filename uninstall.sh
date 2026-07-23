@@ -1,11 +1,20 @@
 #!/bin/zsh
+# Uninstall Gemini Snap: Clean up shortcuts and services.
 set -euo pipefail
 
-LABEL="com.gemini-snap.hotkey"
-PLIST="$HOME/Library/LaunchAgents/${LABEL}.plist"
+SERVICE_NAME="Gemini Snap"
+WORKFLOW_DIR="$HOME/Library/Services/${SERVICE_NAME}.workflow"
 
-launchctl bootout "gui/$(id -u)/${LABEL}" 2>/dev/null || true
-launchctl unload "$PLIST" 2>/dev/null || true
-rm -f "$PLIST"
+echo "==> Cleaning up macOS Quick Action Service..."
+rm -rf "$WORKFLOW_DIR"
 
-echo "LaunchAgent removed. Virtualenv left in place — delete the folder if you want a full wipe."
+echo "==> Removing keyboard shortcut from preferences..."
+PBS_PLIST="$HOME/Library/Preferences/pbs.plist"
+if [[ -f "$PBS_PLIST" ]]; then
+  /usr/libexec/PlistBuddy -c "Delete :NSServicesStatus:'(null) - ${SERVICE_NAME} - runWorkflowAsService'" "$PBS_PLIST" 2>/dev/null || true
+fi
+
+echo "==> Updating services cache..."
+/System/Library/CoreServices/pbs -update 2>/dev/null || true
+
+echo "Uninstall completed."
