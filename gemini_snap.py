@@ -87,7 +87,9 @@ def run_osascript(script: str) -> subprocess.CompletedProcess:
 # ---------------------------------------------------------------------------
 def try_build_region_select() -> Optional[str]:
 	if os.path.isfile(REGION_SELECT_BIN) and os.access(REGION_SELECT_BIN, os.X_OK):
-		return REGION_SELECT_BIN
+		if os.path.isfile(REGION_SELECT_SRC):
+			if os.path.getmtime(REGION_SELECT_BIN) >= os.path.getmtime(REGION_SELECT_SRC):
+				return REGION_SELECT_BIN
 	if not os.path.isfile(REGION_SELECT_SRC):
 		return None
 	if not shutil.which("clang"):
