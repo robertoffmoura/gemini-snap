@@ -1,96 +1,90 @@
 # Gemini Snap
 
-Two-click screen region → screenshot → **new Chrome tab** on Gemini → paste image → Enter.
+> Two-click screen region capture ➔ Instantly open in Gemini ➔ Auto-paste & submit in Google Chrome.
 
-## Run
+Gemini Snap is a fast macOS productivity tool designed to streamline sending visual context to Google Gemini. Instead of manually taking a screenshot, opening a browser, navigating to Gemini, and pasting the file, Gemini Snap does all of this in a single action.
 
-```bash
-chmod +x run.sh build.sh gemini_snap.py
-./run.sh
+---
+
+## How It Works
+
+```mermaid
+sequenceDiagram
+	autonumber
+	actor User
+	participant Script as run.sh / gemini_snap.py
+	participant Overlay as region_select (Obj-C)
+	participant OS as macOS (screencapture)
+	participant Chrome as Google Chrome
+
+	User->>Script: Trigger Gemini Snap (or press ⌥⌘G)
+	Script->>Script: Build region_select binary (if needed)
+	Script->>Overlay: Launch multi-display overlay
+	Note over Overlay: Semitransparent dark screen overlay
+	User->>Overlay: Click first corner & opposite corner
+	Overlay-->>Script: Return coordinates (X, Y, W, H)
+	Script->>OS: Capture region to temp PNG file
+	Script->>OS: Load PNG data into clipboard as 'PNGf'
+	Script->>Chrome: Launch & open Gemini URL
+	Script->>Script: Delay for page load
+	Script->>OS: Simulate keystroke: ⌘V (Paste)
+	Script->>Script: Delay for image upload
+	Script->>OS: Simulate keystroke: Return (Submit)
 ```
 
-1. **Click** first corner  
-2. **Click** opposite corner (Esc cancels)  
-3. Chrome opens Gemini, image is pasted and submitted  
+---
 
-Dry run (clipboard only):
+## Quick Start
 
+### 1. Install & Prepare
+Run the installer to configure executable permissions and perform a one-time build of the Native Objective-C overlay:
+```bash
+./install.sh
+```
+
+### 2. Run standard capture
+```bash
+./run.sh
+```
+1. Click once for the first corner of your target region.
+2. Move your cursor to the opposite corner (a blue outline guides you).
+3. Click again to confirm (or press Esc to cancel).
+4. Google Chrome will automatically open Gemini, paste the screenshot, and submit it.
+
+### 3. Dry-run (Copy to clipboard only)
+If you only want the screenshot copied to your clipboard without opening Chrome or pasting:
 ```bash
 ./run.sh --dry-run
 ```
 
-## Fix the two bugs you hit
+---
 
-### 1. Drag instead of two clicks
+## Configuration and Flags
 
-Default is **two clicks** again:
+Customize the behavior of Gemini Snap using the following CLI flags:
 
-- Prefer native overlay: `clang` builds `RegionSelect.m` → `region_select`  
-- If that fails: Python two-click (no drag; click, move, click)  
-- Only if you ask: `./run.sh --mode drag`
+| Flag | Default | Description |
+|---|---|---|
+| `--mode <two-click\|drag>` | `two-click` | Choose selection type: Native Objective-C two-click overlay or classic `screencapture -i` dragging. |
+| `--dry-run` | *None* | Perform capture and copy to clipboard, but do not open Chrome/Gemini. |
+| `--no-submit` | *None* | Open Gemini and paste the screenshot, but do not simulate the final `Return` key press. |
+| `--load-wait <seconds>` | `4.5` | Duration (in seconds) to wait for the Gemini web app to load before pasting. |
+| `--paste-wait <seconds>` | `1.5` | Duration (in seconds) to wait for the image upload to attach before submitting. |
+| `--save <path>` | *None* | Keep the captured PNG saved at a specific file path (by default, it uses a temporary directory). |
+| `--rect <x,y,w,h>` | *None* | Capture a predefined screen coordinate rectangle instantly without prompt. |
 
-```bash
-./build.sh    # optional; run.sh tries this automatically
-./run.sh
-```
+---
 
-Uses **clang + Objective-C**, not Swift (avoids your `SwiftBridging` CLT bug).
+## Global Keyboard Shortcut (Optional)
 
-### 2. “Could not drive Chrome” / image not uploaded
+You can launch Gemini Snap globally from anywhere in macOS using a keyboard shortcut (e.g., `⌥⌘G`).
 
-Chrome control was rewritten:
-
-| Step | How |
-|---|---|
-| Open Gemini | `open -a "Google Chrome" URL` (no Automation permission) |
-| Paste / Enter | System Events keystrokes (needs **Accessibility**) |
-| Image on clipboard | PNG file → pasteboard as `PNGf` (more reliable for Gemini) |
-
-**You must enable Accessibility** or paste cannot be simulated:
-
-1. **System Settings → Privacy & Security → Accessibility**  
-2. Enable **Terminal** (or iTerm / Warp / VS Code)  
-3. **Quit and reopen** that app  
-4. Retry `./run.sh`
-
-If paste still fails, the screenshot is still on the clipboard — click Gemini’s prompt and press **⌘V**.
-
-Optional (only if macOS prompts):
-
-- **Automation** → allow your terminal to control **System Events** / Chrome  
-
-## Flags
-
-```bash
-./run.sh --dry-run
-./run.sh --no-submit          # paste only
-./run.sh --load-wait 7        # slow Gemini
-./run.sh --paste-wait 2
-./run.sh --mode drag          # old click-drag UI
-./run.sh --save /tmp/x.png
-```
-
-## Shortcut
-
-Point Raycast / Alfred / Shortcuts at:
-
-```text
-/full/path/to/gemini-snap/run.sh
-```
-
-## Permissions checklist
-
-| Permission | Why |
-|---|---|
-| **Screen Recording** | capture region |
-| **Accessibility** | synthetic ⌘V / Enter |
-| **Automation** | only if macOS asks for System Events / Chrome |
-
-## Files
-
-| File | Role |
-|---|---|
-| `RegionSelect.m` | Two-click overlay (clang) |
-| `build.sh` | Compiles overlay |
-| `gemini_snap.py` | Capture + clipboard + Chrome |
-| `run.sh` | Entry point |
+1. **Register the Service:**
+   ```bash
+   ./setup_shortcut.sh
+   ```
+2. **Usage:** Press **Option + Command + G** (`⌥⌘G`) at any time to start capturing.
+3. **Uninstall Service:** If you ever need to remove the shortcut and clean up cached settings:
+   ```bash
+   ./uninstall.sh
+   ```
