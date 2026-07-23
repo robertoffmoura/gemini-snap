@@ -8,12 +8,18 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-# 1. Determine absolute path of run.sh
-ROOT="$(cd "$(dirname "$0")" && pwd)"
-RUN_SH="$ROOT/run.sh"
+# 1. Determine path of the executable
+# If installed via Homebrew, use the stable symlinked command in PATH
+if command -v gemini-snap >/dev/null 2>&1; then
+  RUN_SH="$(command -v gemini-snap)"
+else
+  # Fallback to local run.sh in the script's directory
+  ROOT="$(cd "$(dirname "$0")" && pwd)"
+  RUN_SH="$ROOT/run.sh"
+fi
 
 if [[ ! -f "$RUN_SH" ]]; then
-  echo "Error: run.sh not found in $ROOT" >&2
+  echo "Error: executable not found." >&2
   exit 1
 fi
 
@@ -72,13 +78,13 @@ cat <<EOF > "$CONTENTS_DIR/document.wflow"
 				<key>ActionParameters</key>
 				<dict>
 					<key>COMMAND_STRING</key>
-					<string>/bin/zsh "${RUN_SH}"</string>
+					<string>"${RUN_SH}"</string>
 					<key>CheckedForUserDefaultShell</key>
 					<true/>
 					<key>inputMethod</key>
 					<integer>0</integer>
 					<key>shell</key>
-					<string>/bin/zsh</string>
+					<string>/bin/bash</string>
 					<key>source</key>
 					<string></string>
 				</dict>
