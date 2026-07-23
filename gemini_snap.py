@@ -3,8 +3,7 @@
 Gemini Snap — two-click region → screenshot → Gemini in Chrome
 
 Selection:
-  1. ./region_select (Objective-C overlay) if present or buildable via clang
-  2. Python two-click via CoreGraphics (no drag; minimal UI)
+  ./region_select (Objective-C overlay) if present or buildable via clang
 
 Upload path:
   Capture PNG to a temp file → put PNG on clipboard → open Gemini in Chrome
@@ -155,98 +154,6 @@ def select_region_native() -> Tuple[str, Optional[Rect]]:
 	except ValueError as e:
 		print(f"Bad region output: {e}", file=sys.stderr)
 		return "error", None
-
-
-# ---------------------------------------------------------------------------
-# Two-click: pure Python + CoreGraphics (ctypes) — no overlay
-# ---------------------------------------------------------------------------
-def _load_quartz():
-	import ctypes
-	import ctypes.util
-
-	path = ctypes.util.find_library("CoreGraphics")
-	if not path:
-		path = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
-	cg = ctypes.CDLL(path)
-
-	class CGPoint(ctypes.Structure):
-		_fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double)]
-
-	cg.CGEventCreate.restype = ctypes.c_void_p
-	cg.CGEventCreate.argtypes = [ctypes.c_void_p]
-	cg.CGEventGetLocation.restype = CGPoint
-	cg.CGEventGetLocation.argtypes = [ctypes.c_void_p]
-	cg.CGEventSourceButtonState.restype = ctypes.c_bool
-	cg.CGEventSourceButtonState.argtypes = [ctypes.c_uint32, ctypes.c_uint32]
-	return cg, CGPoint
-
-
-def _mouse_down(cg) -> bool:
-	# kCGEventSourceStateCombinedSessionState = 0
-	# kCGMouseButtonLeft = 0
-	return bool(cg.CGEventSourceButtonState(0, 0))
-
-
-def _mouse_pos(cg, CGPoint) -> Tuple[float, float]:
-	ev = cg.CGEventCreate(None)
-	pt = cg.CGEventGetLocation(ev)
-	return float(pt.x), float(pt.y)
-
-
-def select_region_python_two_click() -> Optional[Rect]:
-	"""
-	Two discrete clicks using CoreGraphics button state.
-	No on-screen rectangle preview (clang overlay is preferred for that).
-	"""
-	try:
-		cg, CGPoint = _load_quartz()
-	except Exception as e:
-		print(f"CoreGraphics unavailable: {e}", file=sys.stderr)
-		return None
-
-	print(
-		"\n=== Two-click capture ===\n"
-		"  1) Move to the FIRST corner and click once\n"
-		"  2) Move to the OPPOSITE corner and click once\n"
-		"  Ctrl+C cancels\n",
-		flush=True,
-	)
-	notify("Gemini Snap", "Click first corner of the region")
-
-	def wait_click(label: str) -> Optional[Tuple[float, float]]:
-		print(f"Waiting for {label}…", flush=True)
-		# Wait for release first (avoid counting a held button)
-		while _mouse_down(cg):
-			time.sleep(0.02)
-		# Wait for press
-		while not _mouse_down(cg):
-			time.sleep(0.02)
-		x, y = _mouse_pos(cg, CGPoint)
-		# Wait for release
-		while _mouse_down(cg):
-			time.sleep(0.02)
-		print(f"  {label}: ({int(x)}, {int(y)})", flush=True)
-		return x, y
-
-	try:
-		p1 = wait_click("corner 1")
-		notify("Gemini Snap", "Click opposite corner")
-		time.sleep(0.15)  # debounce
-		p2 = wait_click("corner 2")
-	except KeyboardInterrupt:
-		print("\nCancelled.")
-		return None
-
-	if not p1 or not p2:
-		return None
-
-	x1, y1 = p1
-	x2, y2 = p2
-	x = int(round(min(x1, x2)))
-	y = int(round(min(y1, y2)))
-	w = int(round(abs(x2 - x1)))
-	h = int(round(abs(y2 - y1)))
-	return Rect(x, y, max(w, 1), max(h, 1))
 
 
 # ---------------------------------------------------------------------------
@@ -492,10 +399,7 @@ def main(argv: Optional[list] = None) -> int:
 			if status == "cancel":
 				return 0
 			if status != "ok":
-				print("Using Python two-click fallback…", flush=True)
-				rect = select_region_python_two_click()
-				if rect is None:
-					return 0
+				return 0
 
 		if rect is not None:
 			print(f"Capturing {rect.as_screencapture_R()} …", flush=True)
