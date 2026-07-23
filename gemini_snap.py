@@ -74,12 +74,11 @@ def notify(title: str, message: str) -> None:
     )
 
 
-def run_osascript(script: str, check: bool = True) -> subprocess.CompletedProcess:
+def run_osascript(script: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["osascript", "-e", script],
         capture_output=True,
         text=True,
-        check=False if not check else False,
     )
 
 
@@ -493,7 +492,6 @@ def main(argv: Optional[list] = None) -> int:
     rect: Optional[Rect] = None
     png_path: Optional[str] = None
     tmp_dir = None
-    already_on_clipboard = False
 
     try:
         if args.rect:
@@ -502,7 +500,6 @@ def main(argv: Optional[list] = None) -> int:
             if not select_region_interactive_drag():
                 print("Cancelled.")
                 return 1
-            already_on_clipboard = True
         else:
             # two-click preferred: native overlay, else Python click-click
             status, rect = select_region_native()
