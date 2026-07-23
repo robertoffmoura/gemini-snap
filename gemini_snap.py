@@ -499,17 +499,17 @@ def main(argv: Optional[list] = None) -> int:
 		elif args.mode == "drag":
 			if not select_region_interactive_drag():
 				print("Cancelled.")
-				return 1
+				return 0
 		else:
 			# two-click preferred: native overlay, else Python click-click
 			status, rect = select_region_native()
 			if status == "cancel":
-				return 1
+				return 0
 			if status != "ok":
 				print("Using Python two-click fallback…", flush=True)
 				rect = select_region_python_two_click()
 				if rect is None:
-					return 1
+					return 0
 
 		if rect is not None:
 			print(f"Capturing {rect.as_screencapture_R()} …", flush=True)
