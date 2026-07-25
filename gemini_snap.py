@@ -29,9 +29,18 @@ if sys.platform != "darwin":
 	print("Gemini Snap only runs on macOS.", file=sys.stderr)
 	sys.exit(1)
 
+def get_user_cache_dir() -> str:
+	cache_dir = os.path.expanduser("~/Library/Caches/gemini-snap")
+	try:
+		os.makedirs(cache_dir, exist_ok=True)
+		return cache_dir
+	except Exception:
+		return tempfile.gettempdir()
+
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-REGION_SELECT_BIN = os.path.join(SCRIPT_DIR, "region_select")
 REGION_SELECT_SRC = os.path.join(SCRIPT_DIR, "RegionSelect.m")
+REGION_SELECT_BIN = os.path.join(get_user_cache_dir(), "region_select")
 GEMINI_URL = "https://gemini.google.com/app"
 DEFAULT_LOAD_WAIT = 2.5
 DEFAULT_PASTE_WAIT = 1.5
