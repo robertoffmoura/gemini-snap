@@ -182,8 +182,9 @@ class ClipboardService:
 	@staticmethod
 	def copy_png_to_clipboard(path: str) -> None:
 		abs_path = os.path.abspath(path)
+		safe_path = abs_path.replace("\\", "\\\\").replace('"', '\\"')
 		script = f'''
-set thePath to POSIX file "{abs_path}"
+set thePath to POSIX file "{safe_path}"
 set the clipboard to (read thePath as «class PNGf»)
 '''
 		result = run_osascript(script)
@@ -193,7 +194,7 @@ set the clipboard to (read thePath as «class PNGf»)
 		script2 = f'''
 use framework "AppKit"
 use framework "Foundation"
-set img to current application's NSImage's alloc()'s initWithContentsOfFile:"{abs_path}"
+set img to current application's NSImage's alloc()'s initWithContentsOfFile:"{safe_path}"
 if img is missing value then error "Could not load image"
 set pb to current application's NSPasteboard's generalPasteboard()
 pb's clearContents()
