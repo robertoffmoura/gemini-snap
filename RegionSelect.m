@@ -16,13 +16,11 @@ static NSString *gInstruction = nil;
 static id gDelegate = nil;
 
 static CGFloat GSMaxScreenY(void) {
-  CGFloat maxY = 0;
-  for (NSScreen *s in [NSScreen screens]) {
-    CGFloat top = NSMaxY(s.frame);
-    if (top > maxY)
-      maxY = top;
+  NSArray<NSScreen *> *screens = [NSScreen screens];
+  if (screens.count > 0) {
+    return NSMaxY(screens[0].frame);
   }
-  return maxY;
+  return 0;
 }
 
 static CGPoint GSLocalToQuartz(NSPoint local, NSScreen *screen) {
