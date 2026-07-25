@@ -73,18 +73,14 @@ class Rect:
 class NotificationService:
 	@staticmethod
 	def notify(title: str, message: str) -> None:
-		def esc(s: str) -> str:
-			return s.replace("\\", "\\\\").replace('"', '\\"')
-
-		subprocess.run(
-			["osascript", "-e", f'display notification "{esc(message)}" with title "{esc(title)}"'],
-			capture_output=True,
-		)
+		script = f'display notification "{message}" with title "{title}"'
+		run_osascript(script)
 
 
 def run_osascript(script: str) -> subprocess.CompletedProcess:
 	return subprocess.run(
-		["osascript", "-e", script],
+		["osascript", "-"],
+		input=script,
 		capture_output=True,
 		text=True,
 	)
