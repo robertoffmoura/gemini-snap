@@ -88,10 +88,8 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
     [[NSColor colorWithCalibratedWhite:0 alpha:0.05] setFill];
     NSRectFill(sel);
 
-    [[NSColor colorWithCalibratedRed:0.3 green:0.75 blue:1 alpha:0.95] setStroke];
-    NSBezierPath *p = [NSBezierPath bezierPathWithRect:sel];
-    p.lineWidth = 2.0;
-    [p stroke];
+    [[NSColor colorWithCalibratedRed:0.3 green:0.75 blue:1 alpha:0.95] set];
+    NSFrameRectWithWidth(sel, 2.0);
     [self drawHandle:c1Local];
     [self drawHandle:cur];
   } else if (gHasCorner1) {
@@ -99,14 +97,9 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
     [self drawHandle:cur];
   }
 
-  [[NSColor colorWithCalibratedWhite:1 alpha:0.55] setStroke];
-  NSBezierPath *cross = [NSBezierPath bezierPath];
-  cross.lineWidth = 1.0;
-  [cross moveToPoint:NSMakePoint(0, cur.y)];
-  [cross lineToPoint:NSMakePoint(NSWidth(self.bounds), cur.y)];
-  [cross moveToPoint:NSMakePoint(cur.x, 0)];
-  [cross lineToPoint:NSMakePoint(cur.x, NSHeight(self.bounds))];
-  [cross stroke];
+  [[NSColor colorWithCalibratedWhite:1 alpha:0.55] setFill];
+  NSRectFill(NSMakeRect(0, cur.y, NSWidth(self.bounds), 1.0));
+  NSRectFill(NSMakeRect(cur.x, 0, 1.0, NSHeight(self.bounds)));
 
   [self drawBanner];
 }
@@ -115,7 +108,7 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
   CGFloat s = 8;
   NSRect r = NSMakeRect(pt.x - s / 2, pt.y - s / 2, s, s);
   [[NSColor colorWithCalibratedRed:0.3 green:0.75 blue:1 alpha:1] setFill];
-  [[NSBezierPath bezierPathWithOvalInRect:r] fill];
+  NSRectFill(r);
 }
 
 - (void)drawBanner {
