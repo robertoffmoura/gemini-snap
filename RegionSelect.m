@@ -13,7 +13,6 @@
 static BOOL gHasCorner1 = NO;
 static CGPoint gCorner1Quartz; // top-left origin
 static NSString *gInstruction = nil;
-static id gDelegate = nil;
 
 static CGFloat GSMaxScreenY(void) {
   NSArray<NSScreen *> *screens = [NSScreen screens];
@@ -45,12 +44,21 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
   return YES;
 }
 
+@class GSOverlayView;
+
+@protocol GSOverlayViewDelegate <NSObject>
+- (void)overlayView:(GSOverlayView *)view didSelectFirstCornerQuartz:(CGPoint)q;
+- (void)overlayView:(GSOverlayView *)view didFinishWithSecondCornerQuartz:(CGPoint)q;
+- (void)overlayViewDidCancel:(GSOverlayView *)view;
+@end
+
 @interface GSOverlayView : NSView
 @property(nonatomic, assign) NSPoint cursor;
 @property(nonatomic, weak) NSScreen *ownScreen;
+@property(nonatomic, weak) id<GSOverlayViewDelegate> delegate;
 @end
 
-@interface GSAppDelegate : NSObject <NSApplicationDelegate>
+@interface GSAppDelegate : NSObject <NSApplicationDelegate, GSOverlayViewDelegate>
 - (void)finishWithP2Quartz:(CGPoint)p2;
 - (void)cancel;
 - (void)refreshAll;
@@ -150,15 +158,15 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
     gCorner1Quartz = q;
     gHasCorner1 = YES;
     gInstruction = @"Click opposite corner  ·  Esc to cancel";
-    [(GSAppDelegate *)gDelegate refreshAll];
+    [self.delegate overlayView:self didSelectFirstCornerQuartz:q];
   } else {
-    [(GSAppDelegate *)gDelegate finishWithP2Quartz:q];
+    [self.delegate overlayView:self didFinishWithSecondCornerQuartz:q];
   }
 }
 
 - (void)keyDown:(NSEvent *)event {
   if (event.keyCode == 53) {
-    [(GSAppDelegate *)gDelegate cancel];
+    [self.delegate overlayViewDidCancel:self];
   }
 }
 
@@ -178,7 +186,6 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
   _windows = [NSMutableArray array];
   _views = [NSMutableArray array];
   _finished = NO;
-  gDelegate = self;
   gHasCorner1 = NO;
   gInstruction = @"Click first corner  ·  Esc to cancel";
 
@@ -206,6 +213,7 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
         [[GSOverlayView alloc] initWithFrame:win.contentView.bounds];
     view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     view.ownScreen = screen;
+    view.delegate = self;
     view.cursor = NSMakePoint(NSWidth(view.bounds) / 2, NSHeight(view.bounds) / 2);
 
     win.contentView = view;
@@ -234,6 +242,18 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
 - (void)refreshAll {
   for (GSOverlayView *v in _views)
     [v setNeedsDisplay:YES];
+}
+
+- (void)overlayView:(GSOverlayView *)view didSelectFirstCornerQuartz:(CGPoint)q {
+  [self refreshAll];
+}
+
+- (void)overlayView:(GSOverlayView *)view didFinishWithSecondCornerQuartz:(CGPoint)q {
+  [self finishWithP2Quartz:q];
+}
+
+- (void)overlayViewDidCancel:(GSOverlayView *)view {
+  [self cancel];
 }
 
 - (void)finishWithP2Quartz:(CGPoint)p2 {
