@@ -280,17 +280,27 @@ end tell
 		subprocess.run(["open", "-a", self.browser_name], capture_output=True)
 		run_osascript(f'tell application "{self.browser_name}" to activate')
 
+	def wait_until_frontmost(self, timeout: float) -> bool:
+		end_time = time.time() + max(timeout, 0.5)
+		while time.time() < end_time:
+			self.bring_to_front()
+			probe = run_osascript(
+				'tell application "System Events" to get name of first process whose frontmost is true'
+			)
+			if probe.returncode == 0 and self.browser_name.lower() in (probe.stdout or "").lower():
+				return True
+			time.sleep(0.2)
+		return False
+
 	def paste_and_maybe_submit(
 		self,
 		load_wait: float = DEFAULT_LOAD_WAIT,
 		paste_wait: float = DEFAULT_PASTE_WAIT,
 		auto_submit: bool = True,
 	) -> None:
-		print(f"Waiting {load_wait:.1f}s for Gemini to load…", flush=True)
-		time.sleep(load_wait)
-
-		self.bring_to_front()
-		time.sleep(0.5)
+		print(f"Waiting for {self.browser_name} to activate…", flush=True)
+		self.wait_until_frontmost(load_wait)
+		time.sleep(0.3)
 
 		probe = run_osascript(
 			'tell application "System Events" to get name of first process whose frontmost is true'
