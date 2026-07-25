@@ -315,24 +315,16 @@ def paste_and_maybe_submit(
 			"  4. Run ./run.sh again\n"
 		)
 
-	# Click near bottom-center of the front Chrome window to focus the composer,
-	# then paste. Wrapped so a click failure still attempts paste.
-	script = f'''
+	# Focus Chrome window and send paste keystroke
+	script = '''
 tell application "System Events"
 	if exists process "Google Chrome" then
 		tell process "Google Chrome"
 			set frontmost to true
-			try
-				set win to front window
-				set {{wx, wy}} to position of win
-				set {{ww, wh}} to size of win
-				-- Gemini prompt is near the bottom center
-				click at {{wx + (ww div 2), wy + wh - 90}}
-			end try
 		end tell
 	end if
-	delay 0.4
-	keystroke "v" using {{command down}}
+	delay 0.2
+	keystroke "v" using {command down}
 end tell
 '''
 	result = run_osascript(script)
