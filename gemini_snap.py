@@ -94,15 +94,15 @@ class BuildService:
 		self.src_path = src_path
 		self.bin_path = bin_path
 
-	def get_or_build_binary(self) -> Optional[str]:
-		if os.path.isfile(self.bin_path) and os.access(self.bin_path, os.X_OK):
+	def get_or_build_binary(self, force_rebuild: bool = False) -> Optional[str]:
+		if not force_rebuild and os.path.isfile(self.bin_path) and os.access(self.bin_path, os.X_OK):
 			if os.path.isfile(self.src_path):
 				if os.path.getmtime(self.bin_path) >= os.path.getmtime(self.src_path):
 					return self.bin_path
 		if not os.path.isfile(self.src_path) or not shutil.which("clang"):
 			return None
 
-		print("Building two-click selector with clang (one-time)…", flush=True)
+		print("Building two-click selector with clang…", flush=True)
 		sdkroot = ""
 		try:
 			res = subprocess.run(
@@ -141,11 +141,11 @@ class RegionSelector:
 	def __init__(self, build_service: Optional[BuildService] = None):
 		self.build_service = build_service or BuildService()
 
-	def select_region(self) -> Tuple[str, Optional[Rect]]:
+	def select_region(self, force_rebuild: bool = False) -> Tuple[str, Optional[Rect]]:
 		"""
 		Returns (status, rect) where status is 'ok' | 'cancel' | 'unavailable' | 'error'
 		"""
-		binary = self.build_service.get_or_build_binary()
+		binary = self.build_service.get_or_build_binary(force_rebuild=force_rebuild)
 		if not binary:
 			return "unavailable", None
 
@@ -370,7 +370,7 @@ class GeminiSnapApp:
 			if self.args.rect:
 				rect = Rect.parse(self.args.rect)
 			else:
-				status, rect = self.region_selector.select_region()
+				status, rect = self.region_selector.select_region(force_rebuild=self.args.rebuild)
 				if status == "cancel":
 					return 0
 				if status != "ok":
@@ -448,6 +448,7 @@ def main(argv: Optional[list] = None) -> int:
 	parser.add_argument("--no-submit", action="store_true")
 	parser.add_argument("--save", metavar="PATH", help="Also keep PNG at PATH")
 	parser.add_argument("--dry-run", action="store_true")
+	parser.add_argument("--rebuild", action="store_true", help="Force recompiling the two-click region selector binary")
 	parser.add_argument("--rect", metavar="X,Y,W,H")
 	args = parser.parse_args(argv)
 

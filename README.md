@@ -67,6 +67,7 @@ Customize the behavior of Gemini Snap using the following CLI flags:
 | Flag | Default | Description |
 |---|---|---|
 | `--browser <name>` | `Google Chrome` | Target browser app to open Gemini (e.g. `Arc`, `Brave Browser`, `Google Chrome`). |
+| `--rebuild` | *None* | Force recompiling the native Objective-C region selector overlay binary. |
 | `--dry-run` | *None* | Perform capture and copy to clipboard, but do not open browser/Gemini. |
 | `--no-submit` | *None* | Open Gemini and paste the screenshot, but do not simulate the final `Return` key press. |
 | `--load-wait <seconds>` | `2.5` | Duration (in seconds) to wait for the Gemini web app to load before pasting. |
