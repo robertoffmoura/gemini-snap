@@ -391,7 +391,7 @@ def main(argv: Optional[list] = None) -> int:
 			if status == "cancel":
 				return 0
 			if status != "ok":
-				return 0
+				return 1
 
 		if rect is not None:
 			print(f"Capturing {rect.as_screencapture_R()} …", flush=True)
