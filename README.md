@@ -66,10 +66,9 @@ Customize the behavior of Gemini Snap using the following CLI flags:
 
 | Flag | Default | Description |
 |---|---|---|
-| `--mode <two-click\|drag>` | `two-click` | Choose selection type: Native Objective-C two-click overlay or classic `screencapture -i` dragging. |
 | `--dry-run` | *None* | Perform capture and copy to clipboard, but do not open Chrome/Gemini. |
 | `--no-submit` | *None* | Open Gemini and paste the screenshot, but do not simulate the final `Return` key press. |
-| `--load-wait <seconds>` | `4.5` | Duration (in seconds) to wait for the Gemini web app to load before pasting. |
+| `--load-wait <seconds>` | `2.5` | Duration (in seconds) to wait for the Gemini web app to load before pasting. |
 | `--paste-wait <seconds>` | `1.5` | Duration (in seconds) to wait for the image upload to attach before submitting. |
 | `--save <path>` | *None* | Keep the captured PNG saved at a specific file path (by default, it uses a temporary directory). |
 | `--rect <x,y,w,h>` | *None* | Capture a predefined screen coordinate rectangle instantly without prompt. |
