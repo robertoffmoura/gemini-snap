@@ -111,12 +111,16 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
 }
 
 - (void)drawBanner {
-  NSDictionary *attrs = @{
-    NSFontAttributeName : [NSFont boldSystemFontOfSize:16],
-    NSForegroundColorAttributeName : [NSColor whiteColor]
-  };
+  static NSDictionary *sBannerAttrs = nil;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    sBannerAttrs = @{
+      NSFontAttributeName : [NSFont boldSystemFontOfSize:16],
+      NSForegroundColorAttributeName : [NSColor whiteColor]
+    };
+  });
   NSString *text = gInstruction ?: @"Click first corner  ·  Esc to cancel";
-  NSSize size = [text sizeWithAttributes:attrs];
+  NSSize size = [text sizeWithAttributes:sBannerAttrs];
   CGFloat padX = 20, padY = 12;
   CGFloat bw = size.width + padX * 2;
   CGFloat bh = size.height + padY * 2;
@@ -125,7 +129,7 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
   NSRect banner = NSMakeRect(bx, by, bw, bh);
   [[NSColor colorWithCalibratedWhite:0.05 alpha:0.8] setFill];
   [[NSBezierPath bezierPathWithRoundedRect:banner xRadius:10 yRadius:10] fill];
-  [text drawAtPoint:NSMakePoint(bx + padX, by + padY) withAttributes:attrs];
+  [text drawAtPoint:NSMakePoint(bx + padX, by + padY) withAttributes:sBannerAttrs];
 }
 
 - (void)mouseMoved:(NSEvent *)event {
