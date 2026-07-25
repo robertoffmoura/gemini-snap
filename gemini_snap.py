@@ -255,16 +255,18 @@ return joined
 	)
 
 
+DEFAULT_BROWSER = "Google Chrome"
+
+
 # ---------------------------------------------------------------------------
-# Chrome + Gemini
+# Browser + Gemini
 # ---------------------------------------------------------------------------
-def open_gemini_in_chrome() -> None:
+def open_gemini_in_browser(browser: str = DEFAULT_BROWSER) -> None:
 	"""
-	Open Gemini in Chrome without requiring Automation permission when possible.
+	Open Gemini in the specified browser without requiring Automation permission when possible.
 	"""
-	# `open -a` uses Launch Services — usually works even when AppleScript Automation is denied.
 	r = subprocess.run(
-		["open", "-a", "Google Chrome", GEMINI_URL],
+		["open", "-a", browser, GEMINI_URL],
 		capture_output=True,
 		text=True,
 	)
@@ -273,7 +275,7 @@ def open_gemini_in_chrome() -> None:
 
 	# Fallback: AppleScript
 	script = f'''
-tell application "Google Chrome"
+tell application "{browser}"
 	activate
 	open location "{GEMINI_URL}"
 end tell
@@ -281,22 +283,22 @@ end tell
 	result = run_osascript(script)
 	if result.returncode != 0:
 		raise RuntimeError(
-			"Could not open Google Chrome.\n"
+			f"Could not open {browser}.\n"
 			f"{r.stderr or r.stdout}\n{result.stderr or result.stdout}\n"
-			"Is Google Chrome installed?"
+			f"Is {browser} installed?"
 		)
 
 
-def _front_chrome() -> None:
-	subprocess.run(["open", "-a", "Google Chrome"], capture_output=True)
-	# Also try AppleScript activate (may prompt for Automation once)
-	run_osascript('tell application "Google Chrome" to activate')
+def _front_browser(browser: str = DEFAULT_BROWSER) -> None:
+	subprocess.run(["open", "-a", browser], capture_output=True)
+	run_osascript(f'tell application "{browser}" to activate')
 
 
 def paste_and_maybe_submit(
 	load_wait: float,
 	paste_wait: float,
 	auto_submit: bool,
+	browser: str = DEFAULT_BROWSER,
 ) -> None:
 	"""
 	After Gemini tab is open: wait, paste image, optionally press Enter.
@@ -306,7 +308,7 @@ def paste_and_maybe_submit(
 	print(f"Waiting {load_wait:.1f}s for Gemini to load…", flush=True)
 	time.sleep(load_wait)
 
-	_front_chrome()
+	_front_browser(browser)
 	time.sleep(0.5)
 
 	# Probe Accessibility early with a harmless System Events call
@@ -324,16 +326,16 @@ def paste_and_maybe_submit(
 			"  4. Run ./run.sh again\n"
 		)
 
-	# Focus Chrome window and send paste keystroke
-	script = '''
+	# Focus target browser window and send paste keystroke
+	script = f'''
 tell application "System Events"
-	if exists process "Google Chrome" then
-		tell process "Google Chrome"
+	if exists process "{browser}" then
+		tell process "{browser}"
 			set frontmost to true
 		end tell
 	end if
 	delay 0.2
-	keystroke "v" using {command down}
+	keystroke "v" using {{command down}}
 end tell
 '''
 	result = run_osascript(script)
@@ -344,7 +346,7 @@ end tell
 		)
 		if simple.returncode != 0:
 			raise RuntimeError(
-				"Could not paste into Chrome.\n"
+				f"Could not paste into {browser}.\n"
 				f"Detail: {(result.stderr or simple.stderr or '').strip()}\n\n"
 				"The screenshot is on your clipboard — click Gemini and press ⌘V.\n"
 				"Also check Accessibility is enabled for your terminal (see above)."
@@ -353,7 +355,7 @@ end tell
 	if auto_submit:
 		print(f"Waiting {paste_wait:.1f}s for image to attach, then Enter…", flush=True)
 		time.sleep(paste_wait)
-		_front_chrome()
+		_front_browser(browser)
 		time.sleep(0.2)
 		ent = run_osascript('tell application "System Events" to key code 36')
 		if ent.returncode != 0:
@@ -367,9 +369,10 @@ def open_gemini_and_paste(
 	load_wait: float = DEFAULT_LOAD_WAIT,
 	paste_wait: float = DEFAULT_PASTE_WAIT,
 	auto_submit: bool = True,
+	browser: str = DEFAULT_BROWSER,
 ) -> None:
-	open_gemini_in_chrome()
-	paste_and_maybe_submit(load_wait, paste_wait, auto_submit)
+	open_gemini_in_browser(browser)
+	paste_and_maybe_submit(load_wait, paste_wait, auto_submit, browser)
 
 
 # ---------------------------------------------------------------------------
@@ -377,8 +380,9 @@ def open_gemini_and_paste(
 # ---------------------------------------------------------------------------
 def main(argv: Optional[list] = None) -> int:
 	parser = argparse.ArgumentParser(
-		description="Two-click screen capture → Gemini in Chrome"
+		description="Two-click screen capture → Gemini in web browser"
 	)
+	parser.add_argument("--browser", default=DEFAULT_BROWSER, help="Target browser (default: Google Chrome)")
 	parser.add_argument("--load-wait", type=float, default=DEFAULT_LOAD_WAIT)
 	parser.add_argument("--paste-wait", type=float, default=DEFAULT_PASTE_WAIT)
 	parser.add_argument("--no-submit", action="store_true")
@@ -433,12 +437,13 @@ def main(argv: Optional[list] = None) -> int:
 			notify("Gemini Snap", "Screenshot copied to clipboard")
 			return 0
 
-		print("Opening Gemini in Chrome and pasting…", flush=True)
+		print(f"Opening Gemini in {args.browser} and pasting…", flush=True)
 		try:
 			open_gemini_and_paste(
 				load_wait=args.load_wait,
 				paste_wait=args.paste_wait,
 				auto_submit=not args.no_submit,
+				browser=args.browser,
 			)
 		except RuntimeError as e:
 			print(str(e), file=sys.stderr)
