@@ -373,6 +373,10 @@ class GeminiSnapApp:
 		self.browser_automator = BrowserAutomator(args.browser)
 
 	def run(self) -> int:
+		if self.args.load_wait < 0 or self.args.paste_wait < 0:
+			print("Error: --load-wait and --paste-wait must be non-negative numbers.", file=sys.stderr)
+			return 1
+
 		rect: Optional[Rect] = None
 		png_path: Optional[str] = None
 		tmp_dir = None
