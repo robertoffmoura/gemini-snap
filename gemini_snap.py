@@ -379,7 +379,11 @@ class GeminiSnapApp:
 
 		try:
 			if self.args.rect:
-				rect = Rect.parse(self.args.rect)
+				try:
+					rect = Rect.parse(self.args.rect)
+				except ValueError as e:
+					print(f"Error parsing --rect: {e}", file=sys.stderr)
+					return 1
 			else:
 				status, rect = self.region_selector.select_region(force_rebuild=self.args.rebuild)
 				if status == "cancel":
