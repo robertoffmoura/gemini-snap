@@ -9,11 +9,7 @@
 
 #import <Cocoa/Cocoa.h>
 
-// Shared across all displays
-static BOOL gHasCorner1 = NO;
-static CGPoint gCorner1Quartz; // top-left origin
-static NSString *gInstruction = nil;
-
+// Shared helper functions
 static CGFloat GSMaxScreenY(void) {
   NSArray<NSScreen *> *screens = [NSScreen screens];
   if (screens.count > 0) {
@@ -56,9 +52,15 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
 @property(nonatomic, assign) NSPoint cursor;
 @property(nonatomic, weak) NSScreen *ownScreen;
 @property(nonatomic, weak) id<GSOverlayViewDelegate> delegate;
+@property(nonatomic, assign) BOOL hasCorner1;
+@property(nonatomic, assign) CGPoint corner1Quartz;
+@property(nonatomic, copy) NSString *instruction;
 @end
 
 @interface GSAppDelegate : NSObject <NSApplicationDelegate, GSOverlayViewDelegate>
+@property(nonatomic, assign) BOOL hasCorner1;
+@property(nonatomic, assign) CGPoint corner1Quartz;
+@property(nonatomic, copy) NSString *instruction;
 - (void)finishWithP2Quartz:(CGPoint)p2;
 - (void)cancel;
 - (void)refreshAll;
@@ -79,7 +81,7 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
 
   NSPoint c1Local;
   BOOL c1Here =
-      gHasCorner1 && GSQuartzToLocal(gCorner1Quartz, self.ownScreen, &c1Local);
+      self.hasCorner1 && GSQuartzToLocal(self.corner1Quartz, self.ownScreen, &c1Local);
   NSPoint cur = self.cursor;
 
   if (c1Here) {
@@ -92,7 +94,7 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
     NSFrameRectWithWidth(sel, 2.0);
     [self drawHandle:c1Local];
     [self drawHandle:cur];
-  } else if (gHasCorner1) {
+  } else if (self.hasCorner1) {
     // First corner on another display — still show cursor handle
     [self drawHandle:cur];
   }
@@ -120,7 +122,7 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
       NSForegroundColorAttributeName : [NSColor whiteColor]
     };
   });
-  NSString *text = gInstruction ?: @"Click first corner  ·  Esc to cancel";
+  NSString *text = self.instruction ?: @"Click first corner  ·  Esc to cancel";
   NSSize size = [text sizeWithAttributes:sBannerAttrs];
   CGFloat padX = 20, padY = 12;
   CGFloat bw = size.width + padX * 2;
@@ -147,10 +149,7 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
   self.cursor = local;
   CGPoint q = GSLocalToQuartz(local, self.ownScreen);
 
-  if (!gHasCorner1) {
-    gCorner1Quartz = q;
-    gHasCorner1 = YES;
-    gInstruction = @"Click opposite corner  ·  Esc to cancel";
+  if (!self.hasCorner1) {
     [self.delegate overlayView:self didSelectFirstCornerQuartz:q];
   } else {
     [self.delegate overlayView:self didFinishWithSecondCornerQuartz:q];
@@ -194,8 +193,8 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
   _windows = [NSMutableArray array];
   _views = [NSMutableArray array];
   _finished = NO;
-  gHasCorner1 = NO;
-  gInstruction = @"Click first corner  ·  Esc to cancel";
+  self.hasCorner1 = NO;
+  self.instruction = @"Click first corner  ·  Esc to cancel";
 
   [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
   [[NSCursor crosshairCursor] set];
@@ -222,6 +221,9 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
     view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     view.ownScreen = screen;
     view.delegate = self;
+    view.hasCorner1 = self.hasCorner1;
+    view.corner1Quartz = self.corner1Quartz;
+    view.instruction = self.instruction;
     view.cursor = NSMakePoint(NSWidth(view.bounds) / 2, NSHeight(view.bounds) / 2);
 
     win.contentView = view;
@@ -248,11 +250,18 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
 }
 
 - (void)refreshAll {
-  for (GSOverlayView *v in _views)
+  for (GSOverlayView *v in _views) {
+    v.hasCorner1 = self.hasCorner1;
+    v.corner1Quartz = self.corner1Quartz;
+    v.instruction = self.instruction;
     [v setNeedsDisplay:YES];
+  }
 }
 
 - (void)overlayView:(GSOverlayView *)view didSelectFirstCornerQuartz:(CGPoint)q {
+  self.corner1Quartz = q;
+  self.hasCorner1 = YES;
+  self.instruction = @"Click opposite corner  ·  Esc to cancel";
   [self refreshAll];
 }
 
@@ -269,10 +278,10 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
     return;
   _finished = YES;
 
-  CGFloat x = MIN(gCorner1Quartz.x, p2.x);
-  CGFloat y = MIN(gCorner1Quartz.y, p2.y);
-  CGFloat w = fabs(p2.x - gCorner1Quartz.x);
-  CGFloat h = fabs(p2.y - gCorner1Quartz.y);
+  CGFloat x = MIN(self.corner1Quartz.x, p2.x);
+  CGFloat y = MIN(self.corner1Quartz.y, p2.y);
+  CGFloat w = fabs(p2.x - self.corner1Quartz.x);
+  CGFloat h = fabs(p2.y - self.corner1Quartz.y);
   if (w < 1)
     w = 1;
   if (h < 1)
