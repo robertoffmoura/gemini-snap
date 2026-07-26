@@ -163,8 +163,23 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
   }
 }
 
-- (void)resetCursorRects {
-  [self addCursorRect:self.bounds cursor:[NSCursor crosshairCursor]];
+- (void)updateTrackingAreas {
+  [super updateTrackingAreas];
+  for (NSTrackingArea *area in self.trackingAreas) {
+    [self removeTrackingArea:area];
+  }
+  NSTrackingAreaOptions options = NSTrackingCursorUpdate |
+                                  NSTrackingActiveAlways |
+                                  NSTrackingInVisibleRect;
+  NSTrackingArea *area = [[NSTrackingArea alloc] initWithRect:self.bounds
+                                                      options:options
+                                                        owner:self
+                                                     userInfo:nil];
+  [self addTrackingArea:area];
+}
+
+- (void)cursorUpdate:(NSEvent *)event {
+  [[NSCursor crosshairCursor] set];
 }
 
 @end
