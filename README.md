@@ -1,6 +1,6 @@
 # Gemini Snap
 
-> Two-click screen region capture ➔ Instantly open in Gemini ➔ Auto-paste & submit in Google Chrome.
+> Two-click screen region capture ➔ Instantly open in Gemini ➔ Auto-paste & submit in your browser.
 
 Gemini Snap is a fast macOS productivity tool designed to streamline sending visual context to Google Gemini. Instead of manually taking a screenshot, opening a browser, navigating to Gemini, and pasting the file, Gemini Snap does all of this in a single action.
 
@@ -15,7 +15,7 @@ sequenceDiagram
 	participant Script as run.sh / gemini_snap.py
 	participant Overlay as region_select (Obj-C)
 	participant OS as macOS (screencapture)
-	participant Chrome as Google Chrome
+	participant Browser as Web Browser
 
 	User->>Script: Trigger Gemini Snap (or press ⌥⌘G)
 	Script->>Script: Build region_select binary (if needed)
@@ -25,7 +25,7 @@ sequenceDiagram
 	Overlay-->>Script: Return coordinates (X, Y, W, H)
 	Script->>OS: Capture region to temp PNG file
 	Script->>OS: Load PNG data into clipboard as 'PNGf'
-	Script->>Chrome: Launch & open Gemini URL
+	Script->>Browser: Launch & open Gemini URL
 	Script->>Script: Delay for page load
 	Script->>OS: Simulate keystroke: ⌘V (Paste)
 	Script->>Script: Delay for image upload
@@ -49,7 +49,7 @@ chmod +x run.sh
 1. Click once for the first corner of your target region.
 2. Move your cursor to the opposite corner (a blue outline guides you).
 3. Click again to confirm (or press Esc to cancel).
-4. Google Chrome will automatically open Gemini, paste the screenshot, and submit it.
+4. Your web browser will automatically open Gemini, paste the screenshot, and submit it.
 (Note: On the first run, the script will automatically compile the native selector binary).
 
 ### 3. Dry-run (Copy to clipboard only)
