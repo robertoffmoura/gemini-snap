@@ -281,9 +281,9 @@ end tell
 		run_osascript(f'tell application "{self.browser_name}" to activate')
 
 	def wait_until_frontmost(self, timeout: float) -> bool:
+		self.bring_to_front()
 		end_time = time.time() + max(timeout, 0.5)
 		while time.time() < end_time:
-			self.bring_to_front()
 			probe = run_osascript(
 				'tell application "System Events" to get name of first process whose frontmost is true'
 			)
