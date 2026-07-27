@@ -446,10 +446,6 @@ class GeminiSnapApp:
 				)
 				return 3
 
-			NotificationService.notify(
-				"Gemini Snap",
-				"Sent to Gemini" if not self.args.no_submit else "Pasted into Gemini",
-			)
 			print("Done.", flush=True)
 			return 0
 		finally:
