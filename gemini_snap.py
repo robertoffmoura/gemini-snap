@@ -40,7 +40,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REGION_SELECT_SRC = os.path.join(SCRIPT_DIR, "RegionSelect.m")
 REGION_SELECT_BIN = os.path.join(get_user_cache_dir(), "region_select")
 GEMINI_URL = "https://gemini.google.com/app"
-DEFAULT_LOAD_WAIT = 2.5
+DEFAULT_LOAD_WAIT = 5.0
 DEFAULT_PASTE_WAIT = 1.5
 DEFAULT_BROWSER = "Google Chrome"
 
@@ -292,6 +292,30 @@ end tell
 			time.sleep(0.2)
 		return False
 
+	def wait_for_tab_loaded(self, timeout: float) -> bool:
+		"""
+		Polls the target browser's native AppleScript API (loading of active tab)
+		until the tab finishes loading (loading == false).
+		"""
+		script = f'''
+tell application "{self.browser_name}"
+	try
+		if (count of windows) = 0 then return "NOWIN"
+		return (loading of active tab of front window) as string
+	on error errText
+		return "ERR:" & errText
+	end try
+end tell
+'''
+		start_time = time.time()
+		while time.time() - start_time < max(timeout, 0.5):
+			res = run_osascript(script)
+			out = (res.stdout or "").strip().lower()
+			if out == "false":
+				return True
+			time.sleep(0.3)
+		return False
+
 	def paste_and_maybe_submit(
 		self,
 		load_wait: float = DEFAULT_LOAD_WAIT,
@@ -300,7 +324,11 @@ end tell
 	) -> None:
 		print(f"Waiting for {self.browser_name} to activate…", flush=True)
 		self.wait_until_frontmost(load_wait)
-		time.sleep(0.3)
+
+		if not self.wait_for_tab_loaded(load_wait):
+			print("Page load polling timed out; attempting paste anyway…", flush=True)
+		else:
+			time.sleep(0.4)
 
 		probe = run_osascript(
 			'tell application "System Events" to get name of first process whose frontmost is true'
