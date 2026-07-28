@@ -45,7 +45,6 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
 @protocol GSOverlayViewDelegate <NSObject>
 - (void)overlayView:(GSOverlayView *)view didSelectFirstCornerQuartz:(CGPoint)q;
 - (void)overlayView:(GSOverlayView *)view didFinishWithSecondCornerQuartz:(CGPoint)q;
-- (void)overlayViewDidCancel:(GSOverlayView *)view;
 @end
 
 @interface GSOverlayView : NSView
@@ -156,12 +155,6 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
   }
 }
 
-- (void)keyDown:(NSEvent *)event {
-  if (event.keyCode == 53) {
-    [self.delegate overlayViewDidCancel:self];
-  }
-}
-
 - (void)updateTrackingAreas {
   [super updateTrackingAreas];
   for (NSTrackingArea *area in self.trackingAreas) {
@@ -267,10 +260,6 @@ static BOOL GSQuartzToLocal(CGPoint q, NSScreen *screen, NSPoint *outLocal) {
 
 - (void)overlayView:(GSOverlayView *)view didFinishWithSecondCornerQuartz:(CGPoint)q {
   [self finishWithP2Quartz:q];
-}
-
-- (void)overlayViewDidCancel:(GSOverlayView *)view {
-  [self cancel];
 }
 
 - (void)finishWithP2Quartz:(CGPoint)p2 {

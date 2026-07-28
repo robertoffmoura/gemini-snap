@@ -389,9 +389,6 @@ end tell
 				f"Is {self.browser_name} installed?"
 			)
 
-	def bring_to_front(self) -> None:
-		run_osascript(f'tell application "{self.browser_name}" to activate')
-
 	def run_javascript(self, js: str) -> Tuple[Optional[str], Optional[str]]:
 		"""
 		Execute JavaScript in the frontmost browser tab.
@@ -876,7 +873,7 @@ class GeminiSnapApp:
 			print("Done.", flush=True)
 			return 0
 		finally:
-			if tmp_dir and os.path.isdir(tmp_dir) and not self.args.save:
+			if tmp_dir and os.path.isdir(tmp_dir):
 				shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
