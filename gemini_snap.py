@@ -41,7 +41,7 @@ REGION_SELECT_SRC = os.path.join(SCRIPT_DIR, "RegionSelect.m")
 REGION_SELECT_BIN = os.path.join(get_user_cache_dir(), "region_select")
 GEMINI_URL = "https://gemini.google.com/app"
 DEFAULT_LOAD_WAIT = 5.0
-DEFAULT_PASTE_WAIT = 1.5
+DEFAULT_PASTE_WAIT = 0.8
 DEFAULT_BROWSER = "Google Chrome"
 
 
@@ -344,10 +344,30 @@ end tell
 		print(f"  [timing] Pasted in {t_pasted - t_loaded:.2f}s", flush=True)
 
 		if auto_submit:
-			print(f"Waiting {paste_wait:.1f}s for image to attach, then Enter…", flush=True)
+			print(f"[DEBUG] Waiting {paste_wait:.1f}s for image attachment…", flush=True)
 			time.sleep(paste_wait)
-			self.bring_to_front()
-			ent = run_osascript('tell application "System Events" to key code 36')
+
+			probe1 = run_osascript('tell application "System Events" to get name of first process whose frontmost is true')
+			print(f"[DEBUG] Frontmost app before Return: {probe1.stdout.strip()!r} (ret={probe1.returncode}, err={probe1.stderr.strip()!r})", flush=True)
+
+			submit_script = f'''
+tell application "System Events"
+	if exists process "{self.browser_name}" then
+		tell process "{self.browser_name}"
+			set frontmost to true
+		end tell
+	end if
+	keystroke " "
+	key code 51
+	keystroke return
+end tell
+'''
+			ent = run_osascript(submit_script)
+			print(f"[DEBUG] Keystroke 'return' result: ret={ent.returncode}, stdout={ent.stdout.strip()!r}, stderr={ent.stderr.strip()!r}", flush=True)
+
+			probe2 = run_osascript('tell application "System Events" to get name of first process whose frontmost is true')
+			print(f"[DEBUG] Frontmost app after Return: {probe2.stdout.strip()!r} (ret={probe2.returncode})", flush=True)
+
 			if ent.returncode != 0:
 				print(
 					"Paste likely worked; Enter failed. Press Return in Gemini manually.",
