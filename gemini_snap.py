@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import json
 import os
 import shutil
 import subprocess
@@ -374,6 +375,66 @@ class BrowserAutomator:
 })();
 """.strip()
 
+	_JS_CLICK_TEMP_CHAT = r"""
+(function () {
+  try {
+    function isVisible(el) {
+      if (!el) return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    }
+    
+    var selectors = 'button, [role="button"], a, mat-icon-button, gds-icon-button, div[role="button"], [data-tooltip], [aria-label]';
+    var els = document.querySelectorAll(selectors);
+    var candidateLog = [];
+    var clicked = false;
+    var clickedLabel = "";
+
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (!isVisible(el)) continue;
+
+      var ariaLabel = el.getAttribute("aria-label") || "";
+      var dataTooltip = el.getAttribute("data-tooltip") || el.getAttribute("mattooltip") || el.getAttribute("tooltip") || "";
+      var title = el.title || "";
+      var text = el.innerText || el.textContent || "";
+      
+      var describedByText = "";
+      var describedById = el.getAttribute("aria-describedby");
+      if (describedById) {
+        var descEl = document.getElementById(describedById);
+        if (descEl) describedByText = descEl.innerText || descEl.textContent || "";
+      }
+
+      var fullLabel = (ariaLabel + " | " + dataTooltip + " | " + title + " | " + text + " | " + describedByText).trim();
+      var low = fullLabel.toLowerCase();
+
+      if (low.indexOf("temp") !== -1 || low.indexOf("chat") !== -1 || low.indexOf("new") !== -1 || low.indexOf("incognito") !== -1 || low.indexOf("private") !== -1) {
+        candidateLog.push(el.tagName + '[' + fullLabel.substring(0, 80) + ']');
+      }
+
+      if (!clicked && (low.indexOf("temporary chat") !== -1 || low.indexOf("temp chat") !== -1 || low.indexOf("temporary") !== -1)) {
+        try {
+          el.click();
+          el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        } catch (e) {}
+        clicked = true;
+        clickedLabel = fullLabel;
+      }
+    }
+
+    return JSON.stringify({
+      clicked: clicked,
+      clickedLabel: clickedLabel,
+      candidates: candidateLog.slice(0, 15),
+      totalElementsChecked: els.length
+    });
+  } catch (err) {
+    return JSON.stringify({ error: String(err) });
+  }
+})();
+""".strip()
+
 	def __init__(self, browser_name: str = DEFAULT_BROWSER):
 		self.browser_name = browser_name
 
@@ -560,6 +621,44 @@ end tell
 			time.sleep(poll_interval)
 
 		return False, last, saw_valid_response
+
+	def click_temporary_chat(self) -> bool:
+		"""Attempts to find and click the 'Temporary chat' button in Gemini UI with debug logging."""
+		print("Searching for 'Temporary chat' button…", flush=True)
+		if not self._supports_javascript_bridge():
+			print("  [temp-chat] JS bridge unsupported", flush=True)
+			return False
+
+		res, err = self.run_javascript(self._JS_CLICK_TEMP_CHAT)
+		if err:
+			print(f"  [temp-chat] JS error: {err}", flush=True)
+			return False
+
+		try:
+			data = json.loads(res or "{}")
+			if "error" in data:
+				print(f"  [temp-chat] JS exception: {data['error']}", flush=True)
+				return False
+
+			clicked = data.get("clicked", False)
+			label = data.get("clickedLabel", "")
+			candidates = data.get("candidates", [])
+			total = data.get("totalElementsChecked", 0)
+
+			if clicked:
+				print(f"  [temp-chat] Successfully clicked: {label}", flush=True)
+				time.sleep(0.4)
+				return True
+			else:
+				print(f"  [temp-chat] 'Temporary chat' button not found (checked {total} elements).", flush=True)
+				if candidates:
+					print("  [temp-chat] Candidate buttons seen on page:", flush=True)
+					for c in candidates:
+						print(f"    - {c}", flush=True)
+				return False
+		except Exception as e:
+			print(f"  [temp-chat] Raw response: {res} (parse error: {e})", flush=True)
+			return False
 
 	def wait_for_composer_ready(self, timeout: float) -> bool:
 		"""Wait until Gemini's text/composer input exists in the DOM."""
@@ -778,6 +877,8 @@ end tell
 
 		t_loaded = time.time()
 		print(f"  [timing] Page ready in {t_loaded - t0:.2f}s", flush=True)
+
+		self.click_temporary_chat()
 
 		# Brief settle so SPA finishes rendering composer components before baseline snapshot
 		time.sleep(0.3)
