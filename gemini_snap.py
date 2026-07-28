@@ -277,20 +277,7 @@ end tell
 			)
 
 	def bring_to_front(self) -> None:
-		subprocess.run(["open", "-a", self.browser_name], capture_output=True)
 		run_osascript(f'tell application "{self.browser_name}" to activate')
-
-	def wait_until_frontmost(self, timeout: float) -> bool:
-		self.bring_to_front()
-		end_time = time.time() + max(timeout, 0.5)
-		while time.time() < end_time:
-			probe = run_osascript(
-				'tell application "System Events" to get name of first process whose frontmost is true'
-			)
-			if probe.returncode == 0 and self.browser_name.lower() in (probe.stdout or "").lower():
-				return True
-			time.sleep(0.2)
-		return False
 
 	def wait_for_tab_loaded(self, timeout: float) -> bool:
 		"""
@@ -299,6 +286,7 @@ end tell
 		"""
 		script = f'''
 tell application "{self.browser_name}"
+	activate
 	try
 		if (count of windows) = 0 then return "NOWIN"
 		return (loading of active tab of front window) as string
@@ -313,7 +301,7 @@ end tell
 			out = (res.stdout or "").strip().lower()
 			if out == "false":
 				return True
-			time.sleep(0.3)
+			time.sleep(0.15)
 		return False
 
 	def paste_and_maybe_submit(
@@ -322,27 +310,12 @@ end tell
 		paste_wait: float = DEFAULT_PASTE_WAIT,
 		auto_submit: bool = True,
 	) -> None:
-		print(f"Waiting for {self.browser_name} to activate…", flush=True)
-		self.wait_until_frontmost(load_wait)
+		t0 = time.time()
+		print(f"Waiting for {self.browser_name} to load…", flush=True)
 
-		if not self.wait_for_tab_loaded(load_wait):
-			print("Page load polling timed out; attempting paste anyway…", flush=True)
-		else:
-			time.sleep(0.4)
-
-		probe = run_osascript(
-			'tell application "System Events" to get name of first process whose frontmost is true'
-		)
-		if probe.returncode != 0:
-			raise RuntimeError(
-				"macOS blocked System Events (needed to press ⌘V).\n"
-				f"Detail: {(probe.stderr or probe.stdout or '').strip()}\n\n"
-				"Fix (required):\n"
-				"  1. System Settings → Privacy & Security → Accessibility\n"
-				"  2. Enable your terminal app (Terminal / iTerm / Warp / VS Code)\n"
-				"  3. Fully quit that app (Cmd+Q) and reopen it\n"
-				"  4. Run ./run.sh again\n"
-			)
+		self.wait_for_tab_loaded(load_wait)
+		t_loaded = time.time()
+		print(f"  [timing] Page ready in {t_loaded - t0:.2f}s", flush=True)
 
 		script = f'''
 tell application "System Events"
@@ -351,7 +324,6 @@ tell application "System Events"
 			set frontmost to true
 		end tell
 	end if
-	delay 0.2
 	keystroke "v" using {{command down}}
 end tell
 '''
@@ -368,17 +340,20 @@ end tell
 					"Also check Accessibility is enabled for your terminal (see above)."
 				)
 
+		t_pasted = time.time()
+		print(f"  [timing] Pasted in {t_pasted - t_loaded:.2f}s", flush=True)
+
 		if auto_submit:
 			print(f"Waiting {paste_wait:.1f}s for image to attach, then Enter…", flush=True)
 			time.sleep(paste_wait)
 			self.bring_to_front()
-			time.sleep(0.2)
 			ent = run_osascript('tell application "System Events" to key code 36')
 			if ent.returncode != 0:
 				print(
 					"Paste likely worked; Enter failed. Press Return in Gemini manually.",
 					file=sys.stderr,
 				)
+			print(f"  [timing] Total flow: {time.time() - t0:.2f}s", flush=True)
 
 	def open_and_paste(
 		self,
