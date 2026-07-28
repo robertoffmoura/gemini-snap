@@ -13,6 +13,7 @@ Modules:
 from __future__ import annotations
 
 import argparse
+import base64
 import os
 import shutil
 import subprocess
@@ -41,7 +42,9 @@ REGION_SELECT_SRC = os.path.join(SCRIPT_DIR, "RegionSelect.m")
 REGION_SELECT_BIN = os.path.join(get_user_cache_dir(), "region_select")
 GEMINI_URL = "https://gemini.google.com/app"
 DEFAULT_LOAD_WAIT = 5.0
-DEFAULT_PASTE_WAIT = 0.8
+# Max seconds to poll the Gemini UI for image-attachment readiness before Enter.
+# We return as soon as the attachment is detected — this is not a fixed sleep.
+DEFAULT_PASTE_WAIT = 5.0
 DEFAULT_BROWSER = "Google Chrome"
 
 
@@ -250,8 +253,118 @@ return joined
 
 
 class BrowserAutomator:
+	# Chromium-family apps that expose Chrome's AppleScript dictionary
+	# (execute javascript on tabs). Safari uses a different command.
+	_CHROMIUM_BROWSERS = {
+		"google chrome",
+		"google chrome canary",
+		"google chrome beta",
+		"google chrome dev",
+		"brave browser",
+		"microsoft edge",
+		"microsoft edge beta",
+		"microsoft edge dev",
+		"chromium",
+		"arc",
+		"dia",
+		"vivaldi",
+		"opera",
+	}
+
+	# JS: is Gemini's composer present and focusable?
+	_JS_COMPOSER_STATUS = r"""
+(function () {
+  var input = document.querySelector(
+    'div[contenteditable="true"], [role="textbox"], rich-textarea, textarea'
+  );
+  if (!input) return "no-input";
+  try { input.focus(); } catch (e) {}
+  return "ready";
+})();
+""".strip()
+
+	# JS: fingerprint of "something attached in the composer".
+	# Returns a compact token like "b2:r1:s1:i3" so we can diff before/after paste.
+	#   b = blob/data preview images
+	#   r = visible remove/dismiss buttons
+	#   s = enabled send buttons
+	#   i = large images in the lower (composer) half of the viewport
+	#   u = 1 if an upload/progress indicator is visible
+	_JS_ATTACH_FINGERPRINT = r"""
+(function () {
+  try {
+    function isVisible(el) {
+      if (!el) return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    }
+
+    var busy = document.querySelector(
+      '[aria-busy="true"], [role="progressbar"], mat-progress-spinner, circular-progress'
+    );
+    var u = busy && isVisible(busy) ? 1 : 0;
+
+    var b = 0, iLarge = 0;
+    var imgs = document.querySelectorAll("img");
+    for (var i = 0; i < imgs.length; i++) {
+      var img = imgs[i];
+      if (!isVisible(img)) continue;
+      var src = (img.currentSrc || img.src || "").toLowerCase();
+      var w = Math.max(img.naturalWidth || 0, img.clientWidth || 0, img.width || 0);
+      var h = Math.max(img.naturalHeight || 0, img.clientHeight || 0, img.height || 0);
+      if (src.indexOf("blob:") === 0 || src.indexOf("data:image") === 0) {
+        b += 1;
+        continue;
+      }
+      if (w >= 48 && h >= 48) {
+        var top = img.getBoundingClientRect().top;
+        if (top > window.innerHeight * 0.35) iLarge += 1;
+      }
+    }
+
+    var r = 0, s = 0;
+    var buttons = document.querySelectorAll("button, [role='button']");
+    for (var j = 0; j < buttons.length; j++) {
+      var btn = buttons[j];
+      if (!isVisible(btn)) continue;
+      var label = (
+        (btn.getAttribute("aria-label") || "") + " " +
+        (btn.getAttribute("data-tooltip") || "") + " " +
+        (btn.title || "")
+      ).toLowerCase();
+      if (
+        label.indexOf("remove") !== -1 ||
+        label.indexOf("delete") !== -1 ||
+        label.indexOf("dismiss") !== -1
+      ) {
+        r += 1;
+      }
+      if (label.indexOf("send") !== -1) {
+        var disabled =
+          btn.disabled ||
+          btn.getAttribute("aria-disabled") === "true" ||
+          (btn.classList && btn.classList.contains("disabled"));
+        if (!disabled) s += 1;
+      }
+    }
+
+    return "b" + b + ":r" + r + ":s" + s + ":i" + iLarge + ":u" + u;
+  } catch (err) {
+    return "error";
+  }
+})();
+""".strip()
+
 	def __init__(self, browser_name: str = DEFAULT_BROWSER):
 		self.browser_name = browser_name
+
+	@property
+	def _browser_key(self) -> str:
+		return self.browser_name.strip().lower()
+
+	def _supports_javascript_bridge(self) -> bool:
+		key = self._browser_key
+		return key == "safari" or key in self._CHROMIUM_BROWSERS
 
 	def open_gemini(self) -> None:
 		r = subprocess.run(
@@ -279,10 +392,70 @@ end tell
 	def bring_to_front(self) -> None:
 		run_osascript(f'tell application "{self.browser_name}" to activate')
 
+	def run_javascript(self, js: str) -> Tuple[Optional[str], Optional[str]]:
+		"""
+		Execute JavaScript in the frontmost browser tab.
+
+		Returns (result, error). result is the JS return value as a string when
+		successful. error is a short reason when the bridge is unavailable or
+		the call failed (e.g. JS-from-Apple-Events disabled).
+
+		The payload is base64-wrapped so we never fight AppleScript string
+		escaping for quotes/newlines inside the probe scripts.
+		"""
+		b64 = base64.b64encode(js.encode("utf-8")).decode("ascii")
+		# Decode + eval in-page; String() normalizes non-string returns.
+		wrapper = (
+			f'(function(){{var s=atob("{b64}");'
+			f"var r=eval(s);return(r===undefined||r===null)?\"\":String(r);}})()"
+		)
+		# Escape for embedding inside an AppleScript double-quoted string.
+		# Without this the `"` around the base64 payload and the `?"":`
+		# empty-string literal break the AppleScript string delimiter.
+		wrapper = wrapper.replace('\\', '\\\\').replace('"', '\\"')
+
+		key = self._browser_key
+		if key == "safari":
+			script = f'''
+tell application "Safari"
+	try
+		if (count of windows) = 0 then return "ERR:NOWIN"
+		return do JavaScript "{wrapper}" in current tab of front window
+	on error errText
+		return "ERR:" & errText
+	end try
+end tell
+'''
+		elif key in self._CHROMIUM_BROWSERS:
+			script = f'''
+tell application "{self.browser_name}"
+	try
+		if (count of windows) = 0 then return "ERR:NOWIN"
+		return execute active tab of front window javascript "{wrapper}"
+	on error errText
+		return "ERR:" & errText
+	end try
+end tell
+'''
+		else:
+			return None, f"JS bridge not supported for browser {self.browser_name!r}"
+
+		res = run_osascript(script)
+		out = (res.stdout or "").strip()
+		err = (res.stderr or "").strip()
+		if res.returncode != 0:
+			return None, err or out or "osascript failed"
+		if out.startswith("ERR:"):
+			return None, out[4:].strip() or "javascript error"
+		# Chrome sometimes returns missing value as empty / "missing value"
+		if out.lower() in ("", "missing value"):
+			return None, "empty javascript result"
+		return out, None
+
 	def wait_for_tab_loaded(self, timeout: float) -> bool:
 		"""
-		Polls the target browser's native AppleScript API (loading of active tab)
-		until the tab finishes loading (loading == false).
+		Poll the browser's native AppleScript `loading` flag until the active
+		tab finishes its document load (loading == false).
 		"""
 		script = f'''
 tell application "{self.browser_name}"
@@ -295,28 +468,220 @@ tell application "{self.browser_name}"
 	end try
 end tell
 '''
+		# Safari uses a slightly different property path in some versions;
+		# fall through to timeout and let composer polling take over.
 		start_time = time.time()
-		while time.time() - start_time < max(timeout, 0.5):
+		deadline = start_time + max(timeout, 0.5)
+		while time.time() < deadline:
 			res = run_osascript(script)
 			out = (res.stdout or "").strip().lower()
 			if out == "false":
 				return True
-			time.sleep(0.15)
+			# Brief poll interval — not a fixed readiness wait
+			time.sleep(0.1)
 		return False
 
-	def paste_and_maybe_submit(
+	def _poll_js_status(
 		self,
-		load_wait: float = DEFAULT_LOAD_WAIT,
-		paste_wait: float = DEFAULT_PASTE_WAIT,
-		auto_submit: bool = True,
-	) -> None:
-		t0 = time.time()
-		print(f"Waiting for {self.browser_name} to load…", flush=True)
+		js: str,
+		ready_values: Tuple[str, ...],
+		timeout: float,
+		poll_interval: float = 0.12,
+	) -> Tuple[bool, str, bool]:
+		"""
+		Poll a JS status probe until it returns one of ready_values or timeout.
 
-		self.wait_for_tab_loaded(load_wait)
-		t_loaded = time.time()
-		print(f"  [timing] Page ready in {t_loaded - t0:.2f}s", flush=True)
+		Returns (ok, detail, bridge_usable):
+		  - ok: got a ready status
+		  - detail: last status or error reason
+		  - bridge_usable: False if JS Apple Events is broken/disabled (caller
+		    should fall back to a timed sleep). True if the bridge worked but
+		    the condition simply wasn't met before timeout.
+		"""
+		if not self._supports_javascript_bridge():
+			return False, "js-bridge-unsupported", False
 
+		deadline = time.time() + max(timeout, 0.2)
+		last = "pending"
+		js_error_streak = 0
+		saw_valid_response = False
+
+		while time.time() < deadline:
+			value, err = self.run_javascript(js)
+			if err is not None:
+				js_error_streak += 1
+				last = f"js-error:{err}"
+				low = err.lower()
+				fatal = any(
+					s in low
+					for s in (
+						"javascript from apple events",
+						"allow javascript",
+						"not allowed",
+						"cannot execute",
+						"executing javascript is turned off",
+						"javascript is turned off",
+					)
+				)
+				# Sustained errors with no successful probe ⇒ bridge unusable
+				if (fatal and js_error_streak >= 2) or (js_error_streak >= 8 and not saw_valid_response):
+					if fatal:
+						print(
+							"  JavaScript from Apple Events appears disabled.\n"
+							"  Enable: View → Developer → Allow JavaScript from Apple Events\n"
+							"  Falling back to timed wait.",
+							flush=True,
+						)
+					return False, last, False
+				time.sleep(poll_interval)
+				continue
+
+			js_error_streak = 0
+			saw_valid_response = True
+			last = (value or "").strip().lower()
+			if last in ready_values:
+				return True, last, True
+			time.sleep(poll_interval)
+
+		return False, last, saw_valid_response
+
+	def wait_for_composer_ready(self, timeout: float) -> bool:
+		"""Wait until Gemini's text/composer input exists in the DOM."""
+		print("Waiting for Gemini composer…", flush=True)
+		ok, detail, _bridge = self._poll_js_status(
+			self._JS_COMPOSER_STATUS,
+			ready_values=("ready",),
+			timeout=timeout,
+		)
+		if ok:
+			return True
+		print(f"  Composer not ready ({detail}); pasting anyway…", flush=True)
+		return False
+
+	@staticmethod
+	def _parse_attach_fingerprint(token: str) -> Optional[dict]:
+		"""Parse 'b2:r1:s1:i3:u0' into a dict. Returns None if malformed."""
+		token = (token or "").strip().lower()
+		if not token or token == "error" or token.startswith("js-error:"):
+			return None
+		parts = {}
+		for piece in token.split(":"):
+			if len(piece) < 2 or not piece[1:].isdigit():
+				return None
+			parts[piece[0]] = int(piece[1:])
+		if not all(k in parts for k in ("b", "r", "s", "i", "u")):
+			return None
+		return parts
+
+	def _attachment_ready(self, before: Optional[dict], after: Optional[dict]) -> bool:
+		"""
+		True when the post-paste fingerprint shows a new attachment and no
+		upload spinner.
+		"""
+		if not after:
+			return False
+		# Still uploading/processing
+		if after.get("u", 0) > 0:
+			return False
+		if not before:
+			# Absolute signals: local preview, remove chip, or enabled send
+			return after["b"] > 0 or after["r"] > 0 or after["s"] > 0
+
+		# Diff against pre-paste baseline — strongest signal
+		if after["b"] > before["b"]:
+			return True
+		if after["r"] > before["r"]:
+			return True
+		if after["i"] > before["i"]:
+			return True
+		# Send became enabled after paste (image-only message)
+		if after["s"] > before["s"]:
+			return True
+		return False
+
+	def snapshot_attach_fingerprint(self) -> Tuple[Optional[str], bool]:
+		"""
+		Read current attachment fingerprint.
+		Returns (token_or_None, bridge_usable).
+		"""
+		if not self._supports_javascript_bridge():
+			return None, False
+		value, err = self.run_javascript(self._JS_ATTACH_FINGERPRINT)
+		if err is not None:
+			return None, False
+		token = (value or "").strip()
+		if not token or token.lower() == "error":
+			return None, True
+		return token, True
+
+	def wait_for_image_ready_to_submit(
+		self,
+		timeout: float,
+		before_fingerprint: Optional[str] = None,
+	) -> Tuple[bool, bool]:
+		"""
+		After paste: poll until the attachment fingerprint changes (new image
+		preview / remove chip / send enabled) and no upload spinner is shown.
+
+		Returns (ready, bridge_usable).
+		"""
+		print("Polling UI for image attachment…", flush=True)
+		if not self._supports_javascript_bridge():
+			return False, False
+
+		before = self._parse_attach_fingerprint(before_fingerprint or "")
+		deadline = time.time() + max(timeout, 0.2)
+		last = "pending"
+		js_error_streak = 0
+		saw_valid = False
+
+		while time.time() < deadline:
+			value, err = self.run_javascript(self._JS_ATTACH_FINGERPRINT)
+			if err is not None:
+				js_error_streak += 1
+				last = f"js-error:{err}"
+				low = err.lower()
+				fatal = any(
+					s in low
+					for s in (
+						"javascript from apple events",
+						"allow javascript",
+						"not allowed",
+						"cannot execute",
+						"executing javascript is turned off",
+						"javascript is turned off",
+					)
+				)
+				if (fatal and js_error_streak >= 2) or (js_error_streak >= 8 and not saw_valid):
+					if fatal:
+						print(
+							"  JavaScript from Apple Events appears disabled.\n"
+							"  Enable: View → Developer → Allow JavaScript from Apple Events\n"
+							"  Falling back to timed wait.",
+							flush=True,
+						)
+					return False, False
+				time.sleep(0.1)
+				continue
+
+			js_error_streak = 0
+			saw_valid = True
+			last = (value or "").strip()
+			after = self._parse_attach_fingerprint(last)
+			if self._attachment_ready(before, after):
+				print(f"  Image ready (before={before_fingerprint or '—'} after={last})", flush=True)
+				return True, True
+			time.sleep(0.1)
+
+		if saw_valid:
+			print(
+				f"  Image-ready poll timed out (last={last}); submitting anyway…",
+				flush=True,
+			)
+			return False, True
+		return False, False
+
+	def _keystroke_paste(self) -> None:
 		script = f'''
 tell application "System Events"
 	if exists process "{self.browser_name}" then
@@ -340,39 +705,78 @@ end tell
 					"Also check Accessibility is enabled for your terminal (see above)."
 				)
 
-		t_pasted = time.time()
-		print(f"  [timing] Pasted in {t_pasted - t_loaded:.2f}s", flush=True)
-
-		if auto_submit:
-			print(f"[DEBUG] Waiting {paste_wait:.1f}s for image attachment…", flush=True)
-			time.sleep(paste_wait)
-
-			probe1 = run_osascript('tell application "System Events" to get name of first process whose frontmost is true')
-			print(f"[DEBUG] Frontmost app before Return: {probe1.stdout.strip()!r} (ret={probe1.returncode}, err={probe1.stderr.strip()!r})", flush=True)
-
-			submit_script = f'''
+	def _keystroke_submit(self) -> None:
+		# Focus composer via JS when possible, then press Return.
+		self.run_javascript(self._JS_COMPOSER_STATUS)
+		# Brief settle: the DOM can report attachment-ready before Gemini's
+		# internal state is fully wired to accept Return.
+		time.sleep(0.3)
+		submit_script = f'''
 tell application "System Events"
 	if exists process "{self.browser_name}" then
 		tell process "{self.browser_name}"
 			set frontmost to true
 		end tell
 	end if
-	keystroke " "
-	key code 51
 	keystroke return
 end tell
 '''
-			ent = run_osascript(submit_script)
-			print(f"[DEBUG] Keystroke 'return' result: ret={ent.returncode}, stdout={ent.stdout.strip()!r}, stderr={ent.stderr.strip()!r}", flush=True)
+		ent = run_osascript(submit_script)
+		if ent.returncode != 0:
+			print(
+				"Paste likely worked; Enter failed. Press Return in Gemini manually.",
+				file=sys.stderr,
+			)
 
-			probe2 = run_osascript('tell application "System Events" to get name of first process whose frontmost is true')
-			print(f"[DEBUG] Frontmost app after Return: {probe2.stdout.strip()!r} (ret={probe2.returncode})", flush=True)
+	def paste_and_maybe_submit(
+		self,
+		load_wait: float = DEFAULT_LOAD_WAIT,
+		paste_wait: float = DEFAULT_PASTE_WAIT,
+		auto_submit: bool = True,
+	) -> None:
+		t0 = time.time()
+		print(f"Waiting for {self.browser_name} to load…", flush=True)
 
-			if ent.returncode != 0:
-				print(
-					"Paste likely worked; Enter failed. Press Return in Gemini manually.",
-					file=sys.stderr,
+		loaded = self.wait_for_tab_loaded(load_wait)
+		# SPA shell can report loading=false before the composer mounts.
+		# Spend remaining budget (or a short floor) polling the real UI.
+		elapsed = time.time() - t0
+		composer_budget = max(load_wait - elapsed, 1.5) if loaded else max(load_wait - elapsed, 0.5)
+		if self._supports_javascript_bridge():
+			self.wait_for_composer_ready(composer_budget)
+		elif not loaded:
+			print("  Tab-load poll timed out; pasting anyway…", flush=True)
+
+		t_loaded = time.time()
+		print(f"  [timing] Page ready in {t_loaded - t0:.2f}s", flush=True)
+
+		# Baseline UI fingerprint so we can detect the paste landing via DOM diff.
+		before_fp, _ = self.snapshot_attach_fingerprint()
+
+		self._keystroke_paste()
+
+		t_pasted = time.time()
+		print(f"  [timing] Pasted in {t_pasted - t_loaded:.2f}s", flush=True)
+
+		if auto_submit:
+			# paste_wait is a *maximum* poll budget for attachment UI, not a fixed sleep.
+			ready = False
+			bridge_usable = False
+			if self._supports_javascript_bridge():
+				ready, bridge_usable = self.wait_for_image_ready_to_submit(
+					paste_wait,
+					before_fingerprint=before_fp,
 				)
+
+			if not ready and not bridge_usable:
+				# No JS bridge, or Apple Events JS disabled: fall back to timed wait.
+				print(
+					f"Falling back to {paste_wait:.1f}s wait before Enter…",
+					flush=True,
+				)
+				time.sleep(max(paste_wait, 0.0))
+
+			self._keystroke_submit()
 			print(f"  [timing] Total flow: {time.time() - t0:.2f}s", flush=True)
 
 	def open_and_paste(
@@ -481,8 +885,25 @@ def main(argv: Optional[list] = None) -> int:
 		description="Two-click screen capture → Gemini in web browser"
 	)
 	parser.add_argument("--browser", default=DEFAULT_BROWSER, help="Target browser (default: Google Chrome)")
-	parser.add_argument("--load-wait", type=float, default=DEFAULT_LOAD_WAIT)
-	parser.add_argument("--paste-wait", type=float, default=DEFAULT_PASTE_WAIT)
+	parser.add_argument(
+		"--load-wait",
+		type=float,
+		default=DEFAULT_LOAD_WAIT,
+		help=(
+			"Max seconds to wait for the Gemini tab/composer to become ready "
+			f"before pasting (default: {DEFAULT_LOAD_WAIT})"
+		),
+	)
+	parser.add_argument(
+		"--paste-wait",
+		type=float,
+		default=DEFAULT_PASTE_WAIT,
+		help=(
+			"Max seconds to poll the page UI for image-attachment readiness "
+			f"before pressing Enter (default: {DEFAULT_PASTE_WAIT}). "
+			"Returns early when the attachment is detected."
+		),
+	)
 	parser.add_argument("--no-submit", action="store_true")
 	parser.add_argument("--save", metavar="PATH", help="Also keep PNG at PATH")
 	parser.add_argument("--dry-run", action="store_true")

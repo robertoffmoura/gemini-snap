@@ -26,9 +26,9 @@ sequenceDiagram
 	Script->>OS: Capture region to temp PNG file
 	Script->>OS: Load PNG data into clipboard as 'PNGf'
 	Script->>Browser: Launch & open Gemini URL
-	Script->>Script: Delay for page load
+	Script->>Browser: Poll until tab + composer ready
 	Script->>OS: Simulate keystroke: ⌘V (Paste)
-	Script->>Script: Delay for image upload
+	Script->>Browser: Poll DOM until image attachment ready
 	Script->>OS: Simulate keystroke: Return (Submit)
 ```
 
@@ -60,6 +60,18 @@ If you only want the screenshot copied to your clipboard without opening Chrome 
 
 ---
 
+## Browser setup (recommended)
+
+For **fast, accurate** paste/submit timing, enable JavaScript from Apple Events in your browser. Gemini Snap polls the Gemini page DOM to detect when the composer is ready and when the pasted image has attached. Once attached, a brief 0.3s settling delay ensures Gemini's UI state is fully ready before simulating Return to submit.
+
+**Chrome / Brave / Edge / Arc / other Chromium:**
+1. Open the browser
+2. Menu **View → Developer → Allow JavaScript from Apple Events** (enable it)
+
+Without this, the tool falls back to `--paste-wait` / `--load-wait` timed delays.
+
+---
+
 ## Configuration and Flags
 
 Customize the behavior of Gemini Snap using the following CLI flags:
@@ -70,8 +82,8 @@ Customize the behavior of Gemini Snap using the following CLI flags:
 | `--rebuild` | *None* | Force recompiling the native Objective-C region selector overlay binary. |
 | `--dry-run` | *None* | Perform capture and copy to clipboard, but do not open browser/Gemini. |
 | `--no-submit` | *None* | Open Gemini and paste the screenshot, but do not simulate the final `Return` key press. |
-| `--load-wait <seconds>` | `2.5` | Duration (in seconds) to wait for the Gemini web app to load before pasting. |
-| `--paste-wait <seconds>` | `1.5` | Duration (in seconds) to wait for the image upload to attach before submitting. |
+| `--load-wait <seconds>` | `5.0` | Max seconds to poll until the Gemini tab/composer is ready before pasting (returns early). |
+| `--paste-wait <seconds>` | `5.0` | Max seconds to poll the page UI until the pasted image is attached before Enter (returns early). |
 | `--save <path>` | *None* | Keep the captured PNG saved at a specific file path (by default, it uses a temporary directory). |
 | `--rect <x,y,w,h>` | *None* | Capture a predefined screen coordinate rectangle instantly without prompt. |
 
