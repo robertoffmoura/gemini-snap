@@ -275,10 +275,14 @@ class BrowserAutomator:
 	_JS_COMPOSER_STATUS = r"""
 (function () {
   var input = document.querySelector(
-    'div[contenteditable="true"], [role="textbox"], rich-textarea, textarea'
+    'rich-textarea div[contenteditable="true"], rich-textarea [role="textbox"], div[contenteditable="true"], [role="textbox"], textarea'
   );
+  if (!input) input = document.querySelector('rich-textarea, textarea');
   if (!input) return "no-input";
-  try { input.focus(); } catch (e) {}
+  try {
+    input.focus();
+    input.dispatchEvent(new Event('focus', { bubbles: true }));
+  } catch (e) {}
   return "ready";
 })();
 """.strip()
@@ -299,31 +303,27 @@ class BrowserAutomator:
       return r.width > 0 && r.height > 0;
     }
 
-    var busy = document.querySelector(
+    var composer = document.querySelector('rich-textarea, .input-area-container, [role="textbox"], form');
+    var composerContainer = composer ? (composer.closest('form, .input-area-container, .composer-container') || composer.parentElement || composer) : document.body;
+
+    var busy = composerContainer.querySelector(
       '[aria-busy="true"], [role="progressbar"], mat-progress-spinner, circular-progress'
     );
     var u = busy && isVisible(busy) ? 1 : 0;
 
-    var b = 0, iLarge = 0;
-    var imgs = document.querySelectorAll("img");
+    var b = 0;
+    var imgs = composerContainer.querySelectorAll("img");
     for (var i = 0; i < imgs.length; i++) {
       var img = imgs[i];
       if (!isVisible(img)) continue;
       var src = (img.currentSrc || img.src || "").toLowerCase();
-      var w = Math.max(img.naturalWidth || 0, img.clientWidth || 0, img.width || 0);
-      var h = Math.max(img.naturalHeight || 0, img.clientHeight || 0, img.height || 0);
-      if (src.indexOf("blob:") === 0 || src.indexOf("data:image") === 0) {
+      if (src.indexOf("blob:") === 0 || src.indexOf("data:image") === 0 || src.indexOf("googleusercontent") !== -1) {
         b += 1;
-        continue;
-      }
-      if (w >= 48 && h >= 48) {
-        var top = img.getBoundingClientRect().top;
-        if (top > window.innerHeight * 0.35) iLarge += 1;
       }
     }
 
     var r = 0, s = 0;
-    var buttons = document.querySelectorAll("button, [role='button']");
+    var buttons = composerContainer.querySelectorAll("button, [role='button']");
     for (var j = 0; j < buttons.length; j++) {
       var btn = buttons[j];
       if (!isVisible(btn)) continue;
@@ -335,20 +335,39 @@ class BrowserAutomator:
       if (
         label.indexOf("remove") !== -1 ||
         label.indexOf("delete") !== -1 ||
-        label.indexOf("dismiss") !== -1
+        label.indexOf("dismiss") !== -1 ||
+        label.indexOf("clear") !== -1
       ) {
         r += 1;
       }
-      if (label.indexOf("send") !== -1) {
-        var disabled =
-          btn.disabled ||
-          btn.getAttribute("aria-disabled") === "true" ||
-          (btn.classList && btn.classList.contains("disabled"));
-        if (!disabled) s += 1;
+    }
+
+    var sendBtn = document.querySelector('button[aria-label*="Send" i], button[aria-label*="Submit" i], .send-button');
+    if (sendBtn && isVisible(sendBtn)) {
+      var disabled = sendBtn.disabled || sendBtn.getAttribute("aria-disabled") === "true" || (sendBtn.classList && sendBtn.classList.contains("disabled"));
+      if (!disabled) s = 1;
+    }
+
+    var iLarge = 0;
+    var allImgs = document.querySelectorAll("img");
+    for (var m = 0; m < allImgs.length; m++) {
+      if (!isVisible(allImgs[m])) continue;
+      var w = Math.max(allImgs[m].naturalWidth || 0, allImgs[m].clientWidth || 0, allImgs[m].height || 0);
+      var h = Math.max(allImgs[m].naturalHeight || 0, allImgs[m].clientHeight || 0, allImgs[m].height || 0);
+      if (w >= 48 && h >= 48 && allImgs[m].getBoundingClientRect().top > window.innerHeight * 0.35) {
+        iLarge += 1;
       }
     }
 
-    return "b" + b + ":r" + r + ":s" + s + ":i" + iLarge + ":u" + u;
+    var attElements = composerContainer.querySelectorAll(
+      'uploader-file-thumbnail, [class*="thumbnail"], [class*="file-preview"], [class*="attachment"], mat-chip'
+    );
+    var a = 0;
+    for (var k = 0; k < attElements.length; k++) {
+      if (isVisible(attElements[k])) a += 1;
+    }
+
+    return "b" + b + ":r" + r + ":s" + s + ":i" + iLarge + ":u" + u + ":a" + a;
   } catch (err) {
     return "error";
   }
@@ -566,11 +585,11 @@ end tell
 			if len(piece) < 2 or not piece[1:].isdigit():
 				return None
 			parts[piece[0]] = int(piece[1:])
-		if not all(k in parts for k in ("b", "r", "s", "i", "u")):
+		if not all(k in parts for k in ("b", "r", "s", "i", "u", "a")):
 			return None
 		return parts
 
-	def _attachment_ready(self, before: Optional[dict], after: Optional[dict]) -> bool:
+	def _attachment_ready(self, before: Optional[dict], after: Optional[dict], elapsed_since_paste: float = 0.0) -> bool:
 		"""
 		True when the post-paste fingerprint shows a new attachment and no
 		upload spinner.
@@ -580,9 +599,13 @@ end tell
 		# Still uploading/processing
 		if after.get("u", 0) > 0:
 			return False
+		# Give browser paste event at least 0.35s to process before declaring attachment ready
+		if elapsed_since_paste < 0.35:
+			return False
+
 		if not before:
-			# Absolute signals: local preview, remove chip, or enabled send
-			return after["b"] > 0 or after["r"] > 0 or after["s"] > 0
+			# Absolute signals: local preview, remove chip, enabled send, or attachment container
+			return after["b"] > 0 or after["r"] > 0 or after["s"] > 0 or after.get("a", 0) > 0
 
 		# Diff against pre-paste baseline — strongest signal
 		if after["b"] > before["b"]:
@@ -590,6 +613,8 @@ end tell
 		if after["r"] > before["r"]:
 			return True
 		if after["i"] > before["i"]:
+			return True
+		if after.get("a", 0) > before.get("a", 0):
 			return True
 		# Send became enabled after paste (image-only message)
 		if after["s"] > before["s"]:
@@ -627,7 +652,8 @@ end tell
 			return False, False
 
 		before = self._parse_attach_fingerprint(before_fingerprint or "")
-		deadline = time.time() + max(timeout, 0.2)
+		start_t = time.time()
+		deadline = start_t + max(timeout, 0.2)
 		last = "pending"
 		js_error_streak = 0
 		saw_valid = False
@@ -665,7 +691,8 @@ end tell
 			saw_valid = True
 			last = (value or "").strip()
 			after = self._parse_attach_fingerprint(last)
-			if self._attachment_ready(before, after):
+			elapsed_since_paste = time.time() - start_t
+			if self._attachment_ready(before, after, elapsed_since_paste=elapsed_since_paste):
 				print(f"  Image ready (before={before_fingerprint or '—'} after={last})", flush=True)
 				return True, True
 			time.sleep(0.1)
@@ -679,7 +706,11 @@ end tell
 		return False, False
 
 	def _keystroke_paste(self) -> None:
+		# Ensure input focus via JS right before bringing application to front
+		self.run_javascript(self._JS_COMPOSER_STATUS)
 		script = f'''
+tell application "{self.browser_name}" to activate
+delay 0.15
 tell application "System Events"
 	if exists process "{self.browser_name}" then
 		tell process "{self.browser_name}"
@@ -692,6 +723,7 @@ end tell
 		result = run_osascript(script)
 		if result.returncode != 0:
 			simple = run_osascript(
+				f'tell application "{self.browser_name}" to activate\n'
 				'tell application "System Events" to keystroke "v" using {command down}'
 			)
 			if simple.returncode != 0:
@@ -746,6 +778,9 @@ end tell
 
 		t_loaded = time.time()
 		print(f"  [timing] Page ready in {t_loaded - t0:.2f}s", flush=True)
+
+		# Brief settle so SPA finishes rendering composer components before baseline snapshot
+		time.sleep(0.3)
 
 		# Baseline UI fingerprint so we can detect the paste landing via DOM diff.
 		before_fp, _ = self.snapshot_attach_fingerprint()
